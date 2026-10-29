@@ -219,6 +219,9 @@ p {
    Landing (long-form, mobile first)
    ============================================================ */
 .landing {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   padding: 0 0 30px;
 }
 
@@ -267,7 +270,7 @@ p {
 }
 
 .hero {
-  padding: 26px 20px 0;
+  padding: 36px 20px 0;
 }
 
 .hero-title {
@@ -289,7 +292,7 @@ p {
   position: relative;
   display: flex;
   justify-content: center;
-  margin: 2px 0 -2px;
+  margin: 22px 0 8px;
 }
 
 .hero-stage::before {
@@ -322,8 +325,8 @@ p {
 .land-features {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 4px 18px 0;
+  gap: 8px;
+  padding: 22px 18px 0;
 }
 
 .land-feature {
@@ -361,6 +364,7 @@ p {
 
 .land-cta-wrap {
   padding: 24px 20px 0;
+  margin-top: auto;
 }
 
 .land-cta {
