@@ -2,7 +2,7 @@
   "miniprogramRoot": "dist/",
   "projectname": "wenti-lishu",
   "description": "问题梳理 · 业务问诊",
-  "appid": "touristappid",
+  "appid": "wx0fd49d516bd82da9",
   "setting": {
     "urlCheck": false,
     "es6": false,
