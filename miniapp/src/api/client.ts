@@ -3,7 +3,7 @@ import type { Confidence, DiagnosisReport, Direction } from '../data/consultatio
 
 // 开发：微信开发者工具里把"不校验合法域名"勾上即可用本机地址。
 // 上线：改成你备案后的 HTTPS 域名，并加入小程序合法域名白名单。
-const API_BASE = process.env.TARO_APP_API_BASE || 'http://127.0.0.1:8000/api';
+const API_BASE = 'http://127.0.0.1:8000/api';
 
 export interface ChatMessageResult {
   type: 'message';

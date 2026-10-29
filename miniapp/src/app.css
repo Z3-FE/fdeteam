@@ -1,7 +1,7 @@
 /* ============================================================
    Design tokens
    ============================================================ */
-:root {
+page {
   --brand: #ff7a59;
   --brand-dark: #e85c3f;
   --brand-soft: #fff1ec;
@@ -23,7 +23,13 @@
     'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
-* {
+page,
+view,
+text,
+button,
+input,
+textarea,
+scroll-view {
   box-sizing: border-box;
 }
 
@@ -33,6 +39,7 @@ body {
   padding: 0;
 }
 
+page,
 body {
   min-width: 320px;
   min-height: 100vh;
@@ -1662,12 +1669,7 @@ p {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* prefers-reduced-motion 省略：WXSS 不支持通配选择器 * */
 
 /* ============================================================
    Taro / weapp 适配：原 CSS 用标签选择器处，补成 class 版
