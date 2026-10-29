@@ -1,4 +1,5 @@
 import logging
+import re
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -73,6 +74,16 @@ def _normalize_report(raw: dict) -> dict:
     }
 
 
+def _split_suggestions(text: str) -> tuple[str, list[str]]:
+    """从回复里抽出 @@SUGGEST: a | b | c 行，返回(去掉该行的正文, 选项列表)。"""
+    m = re.search(r"@@SUGGEST\s*[:：]\s*(.+)", text)
+    if not m:
+        return text.strip(), []
+    options = [s.strip() for s in re.split(r"[|｜]", m.group(1)) if s.strip()][:4]
+    cleaned = re.sub(r"\n?\s*@@SUGGEST\s*[:：].*", "", text).strip()
+    return cleaned, options
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     conv_id = store.get_or_create_conversation(req.conversationId)
@@ -96,8 +107,9 @@ async def chat(req: ChatRequest):
         store.save_report(conv_id, normalized)
         return ChatReportResponse(conversationId=conv_id, paid=False, report=Report(**normalized))
 
-    store.add_message(conv_id, "assistant", reply)
-    return ChatMessageResponse(conversationId=conv_id, text=reply)
+    cleaned, suggestions = _split_suggestions(reply)
+    store.add_message(conv_id, "assistant", cleaned)
+    return ChatMessageResponse(conversationId=conv_id, text=cleaned, suggestions=suggestions)
 
 
 @app.post("/api/lead")

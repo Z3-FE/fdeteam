@@ -46,10 +46,11 @@ export default function Consult() {
           setSession((prev) => {
             const next: ConsultationSession =
               result.type === 'report'
-                ? { ...prev, conversationId: result.conversationId, report: result.report }
+                ? { ...prev, conversationId: result.conversationId, report: result.report, suggestions: [] }
                 : {
                     ...prev,
                     conversationId: result.conversationId,
+                    suggestions: result.suggestions,
                     messages: [...prev.messages, { id: createMessageId('ai'), role: 'ai', text: result.text }],
                   };
             saveSession(next);
@@ -64,7 +65,12 @@ export default function Consult() {
     [finished, session, thinking],
   );
 
-  const chips = session.answers.length === 0 && !completed && !thinking ? SCENE_CHIPS : [];
+  const chips =
+    thinking || completed
+      ? []
+      : session.answers.length === 0 && session.suggestions.length === 0
+        ? SCENE_CHIPS
+        : session.suggestions;
   const progress = completed ? 100 : Math.min(90, session.answers.length * 25);
   const sendDisabled = completed || thinking || draft.trim().length === 0;
 
@@ -116,7 +122,7 @@ export default function Consult() {
         {chips.length > 0 && (
           <ScrollView className="chips" scrollX>
             {chips.map((chip) => (
-              <View key={chip} className="chip" onClick={() => send(chip)}>
+              <View key={chip} className="chip" onClick={() => setDraft(chip)}>
                 {chip}
               </View>
             ))}

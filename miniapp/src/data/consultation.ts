@@ -43,6 +43,7 @@ export interface ConsultationSession {
   conversationId: string | null;
   messages: ChatMessage[];
   answers: string[];
+  suggestions: string[];
   report: DiagnosisReport | null;
   lead: Lead | null;
 }
@@ -62,6 +63,7 @@ export function createSession(): ConsultationSession {
     conversationId: null,
     messages: [{ id: 'ai-opening', role: 'ai', text: OPENING_MESSAGE }],
     answers: [],
+    suggestions: [],
     report: null,
     lead: null,
   };

@@ -9,6 +9,7 @@ export interface ChatMessageResult {
   type: 'message';
   conversationId: string;
   text: string;
+  suggestions: string[];
 }
 
 export interface ChatReportResult {
@@ -81,7 +82,7 @@ export async function postChat(conversationId: string | null, message: string): 
   if (data.type === 'report') {
     return { type: 'report', conversationId: data.conversationId, report: mapReport(data.report) };
   }
-  return { type: 'message', conversationId: data.conversationId, text: data.text };
+  return { type: 'message', conversationId: data.conversationId, text: data.text, suggestions: data.suggestions || [] };
 }
 
 export async function postLead(

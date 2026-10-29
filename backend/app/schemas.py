@@ -30,6 +30,7 @@ class ChatMessageResponse(BaseModel):
     type: Literal["message"] = "message"
     conversationId: str
     text: str
+    suggestions: list[str] = []
 
 
 class ChatReportResponse(BaseModel):
