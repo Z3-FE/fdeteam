@@ -108,6 +108,11 @@ async def chat(req: ChatRequest):
         return ChatReportResponse(conversationId=conv_id, paid=False, report=Report(**normalized))
 
     cleaned, suggestions = _split_suggestions(reply)
+    if not suggestions:
+        # 兜底：主回复没给选项时，额外生成一次；每个会话最多兜底 3 次
+        prior_assistant = sum(1 for m in history if m.get("role") == "assistant")
+        if prior_assistant <= 3:
+            suggestions = await llm.generate_suggestions(history, cleaned)
     store.add_message(conv_id, "assistant", cleaned)
     return ChatMessageResponse(conversationId=conv_id, text=cleaned, suggestions=suggestions)
 

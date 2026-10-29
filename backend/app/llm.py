@@ -58,6 +58,38 @@ def extract_report(text: str) -> Optional[dict]:
     return None
 
 
+async def generate_suggestions(history: list[dict], question: str) -> list[str]:
+    """兜底：当主回复没带 @@SUGGEST 时，用一次轻量调用专门生成 3 个候选回答。"""
+    settings = get_settings()
+    if settings.mock:
+        return ["说不清", "大概是这样", "没太注意"]
+    messages = [
+        {
+            "role": "system",
+            "content": "你在为一个业务问诊助手生成'快捷回答选项'。根据它刚问出的问题，"
+            "给 3 个用户可能的简短回答，每个 ≤8 字、口语化。只输出这 3 个选项，用 | 分隔，不要任何多余文字。",
+        },
+        {"role": "user", "content": f"刚问的问题：{question}"},
+    ]
+    payload = {
+        "model": settings.model_name,
+        "messages": messages,
+        "temperature": 0.5,
+        "max_tokens": 80,
+        "stream": False,
+    }
+    headers = {"Authorization": f"Bearer {settings.api_key}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
+            resp = await client.post(f"{settings.base_url}/chat/completions", json=payload, headers=headers)
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"]
+    except Exception:  # noqa: BLE001
+        return []
+    opts = [s.strip().strip("·-• ") for s in re.split(r"[|｜\n、]", text) if s.strip()]
+    return opts[:4]
+
+
 # --------------------------------------------------------------------------- #
 # MOCK 模式：没配 API key 时用，走内置脚本，方便先把前后端联调跑通
 # --------------------------------------------------------------------------- #
