@@ -1,0 +1,31 @@
+# 依赖
+node_modules/
+**/node_modules/
+.venv/
+**/.venv/
+
+# 构建产物
+dist/
+**/dist/
+.temp/
+.rn_temp/
+.swc/
+lib/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# 密钥与本地数据（不要提交！）
+.env
+**/.env
+backend/data/
+**/*.db
+
+# 系统 / 编辑器
+.DS_Store
+*.log
+.idea/
+.vscode/
+.history/
