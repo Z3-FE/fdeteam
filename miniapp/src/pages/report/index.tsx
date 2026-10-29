@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Text, View } from '@tarojs/components';
 import { LeadSheet } from '../../components/LeadSheet';
-import { IconArrow, IconBack, IconCheck, IconLock, IconRestart, IconShield, IconSpark } from '../../components/icons';
+import { IconArrow, IconCheck, IconLock, IconShield, IconSpark } from '../../components/icons';
 import { formatReportDate, loadSession, maskPhone, type Confidence, type Lead } from '../../data/consultation';
-import { back, navigate, redirect } from '../../utils/nav';
+import { redirect } from '../../utils/nav';
 
 const TAG_CLASS: Record<Confidence, string> = {
   高: 'tag tag-high',
@@ -41,17 +41,10 @@ export default function Report() {
 
   return (
     <View className="screen report">
-      <View className="topbar">
-        <View className="icon-btn" onClick={back}>
-          <IconBack />
-        </View>
-        <View className="topbar-title">你的业务诊断报告</View>
-        <View className="icon-btn" onClick={() => redirect('chat')}>
-          <IconRestart />
-        </View>
-      </View>
-
       <View className="report-inner">
+        <View style={{ textAlign: 'right', marginBottom: '4px' }} onClick={() => redirect('chat')}>
+          <Text className="text-btn">↻ 重新诊断</Text>
+        </View>
         <View className="report-lead">我帮你理了一下，你看对不对。</View>
         <View className="report-meta">
           <Text className="meta-chip">{dateLabel || '刚刚生成'}</Text>

@@ -9,7 +9,7 @@ import {
   type ConsultationSession,
 } from '../../data/consultation';
 import { AIAvatar, IconClock, IconSend } from '../../components/icons';
-import { back, navigate } from '../../utils/nav';
+import { navigate } from '../../utils/nav';
 import { postChat } from '../../api/client';
 
 export default function Consult() {
@@ -80,18 +80,6 @@ export default function Consult() {
 
   return (
     <View className="screen chat">
-      <View className="topbar chat-topbar">
-        <View className="icon-btn" onClick={back}>
-          <Text className="qb-icon">‹</Text>
-        </View>
-        <View className="chat-topbar-title">
-          <View className="chat-h1">业务问诊</View>
-          <Text className="chat-sub">免费 · 帮你把问题理清楚</Text>
-        </View>
-        <View className="text-btn" onClick={back}>
-          退出
-        </View>
-      </View>
       <View className="chat-progress">
         <View style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg,#ffb09a,#ff7a59)' }} />
       </View>
