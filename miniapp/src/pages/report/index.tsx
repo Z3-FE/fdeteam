@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Text, View } from '@tarojs/components';
 import { LeadSheet } from '../../components/LeadSheet';
-import { IconArrow, IconCheck, IconLock, IconShield, IconSpark } from '../../components/icons';
+import { IconCheck, IconShield, IconSpark } from '../../components/icons';
 import { formatReportDate, loadSession, maskPhone, type Confidence, type Lead } from '../../data/consultation';
 import { redirect } from '../../utils/nav';
 
@@ -82,37 +82,25 @@ export default function Report() {
                   <View className="dir-title">{direction.title}</View>
                 </View>
                 <Text className={TAG_CLASS[direction.confidence]}>{direction.confidence}置信度</Text>
-                <View className="dir-blur">{direction.summary}</View>
+                <View className="dir-summary">{direction.summary}</View>
+                {direction.causes.length > 0 && (
+                  <View className="dir-block">
+                    <View className="dir-block-h">为什么会这样</View>
+                    {direction.causes.map((c) => (
+                      <View className="dir-li" key={c}>· {c}</View>
+                    ))}
+                  </View>
+                )}
+                {direction.actions.length > 0 && (
+                  <View className="dir-block">
+                    <View className="dir-block-h">可以先动的地方</View>
+                    {direction.actions.map((a) => (
+                      <View className="dir-li dir-li-do" key={a}>✓ {a}</View>
+                    ))}
+                  </View>
+                )}
               </View>
             ))}
-          </View>
-        </View>
-
-        <View className="locked">
-          <View className="locked-body">
-            <View className="card dir-detail">
-              <View className="dir-detail-h">完整根因分析</View>
-              {(report.directions[0]?.causes || []).map((cause) => (
-                <View key={cause}>· {cause}</View>
-              ))}
-              <View className="dir-detail-h">可以先动的地方</View>
-              {(report.directions[0]?.actions || []).map((action) => (
-                <View key={action}>· {action}</View>
-              ))}
-            </View>
-          </View>
-
-          <View className="locked-mask">
-            <View className="locked-icon">
-              <IconLock />
-            </View>
-            <View className="locked-title">方向细节、完整根因分析</View>
-            <View className="locked-text">后面这部分需要一对一再确认，避免给你错的判断。</View>
-            <View className="btn btn-primary" onClick={() => setSheetOpen(true)}>
-              解锁查看完整诊断与方案
-              <IconArrow />
-            </View>
-            <View className="locked-hint">留个联系方式就能看，不用付费。</View>
           </View>
         </View>
 
