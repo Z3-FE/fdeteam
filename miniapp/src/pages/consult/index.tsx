@@ -1,3 +1,4 @@
+import Taro from '@tarojs/taro';
 import { useCallback, useEffect, useState } from 'react';
 import { Input, ScrollView, Text, View } from '@tarojs/components';
 import {
@@ -24,17 +25,6 @@ export default function Consult() {
     const last = session.messages[session.messages.length - 1];
     if (last) setScrollInto(`msg-${last.id}`);
   }, [session.messages.length, thinking]);
-
-  const appendAI = useCallback((text: string) => {
-    setSession((prev) => {
-      const next: ConsultationSession = {
-        ...prev,
-        messages: [...prev.messages, { id: createMessageId('ai'), role: 'ai', text }],
-      };
-      saveSession(next);
-      return next;
-    });
-  }, []);
 
   const send = useCallback(
     (raw: string) => {
@@ -68,10 +58,10 @@ export default function Consult() {
         })
         .catch(() => {
           setThinking(false);
-          appendAI('网络开小差了，麻烦再发一次～');
+          Taro.showToast({ title: '网络开小差了，再发一次', icon: 'none' });
         });
     },
-    [appendAI, finished, session, thinking],
+    [finished, session, thinking],
   );
 
   const chips = session.answers.length === 0 && !completed && !thinking ? SCENE_CHIPS : [];

@@ -1,5 +1,6 @@
 import { Text, View } from '@tarojs/components';
 import { IconChat, IconClock, IconShield, IconUserBadge, IconYuan } from '../../components/icons';
+import { resetSession } from '../../data/consultation';
 import { navigate } from '../../utils/nav';
 
 const FEATURES = [
@@ -63,7 +64,7 @@ export default function Landing() {
       </View>
 
       <View className="land-cta-wrap">
-        <View className="btn btn-primary land-cta" onClick={() => navigate('chat')}>
+        <View className="btn btn-primary land-cta" onClick={() => { resetSession(); navigate('chat'); }}>
           开始免费诊断
         </View>
         <View className="land-trust">
