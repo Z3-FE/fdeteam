@@ -26,6 +26,7 @@ OPENING_MESSAGE = (
 app = FastAPI(title="问题梳理 · 业务问诊 API")
 
 PROFILE_KEYS = ("industry", "teamSize", "budget", "urgency", "decisionMaker", "currentTools")
+SUGGEST_FALLBACK_LIMIT = 3
 
 settings = get_settings()
 app.add_middleware(
@@ -117,9 +118,8 @@ async def chat(req: ChatRequest):
 
     cleaned, suggestions = _split_suggestions(reply)
     if not suggestions:
-        # 兜底：主回复没给选项时，额外生成一次；每个会话最多兜底 3 次
-        prior_assistant = sum(1 for m in history if m.get("role") == "assistant")
-        if prior_assistant <= 3:
+        # 兜底：主回复没给选项时，额外生成一次；每个会话最多兜底 3 次（按实际兜底次数算）
+        if store.use_suggest_fallback(conv_id, SUGGEST_FALLBACK_LIMIT):
             suggestions = await llm.generate_suggestions(history, cleaned)
     store.add_message(conv_id, "assistant", cleaned)
     return ChatMessageResponse(conversationId=conv_id, text=cleaned, suggestions=suggestions)

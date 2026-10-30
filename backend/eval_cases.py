@@ -221,6 +221,12 @@ def _chat(client, cid, msg):
     return r, r["conversationId"]
 
 
+def _print_ai(r):
+    print(f"🩺 {r['text']}")
+    opts = r.get("suggestions") or []
+    print("   选项:", " | ".join(opts) if opts else "（无）")
+
+
 def _saved_report(cid):
     with store._connect() as conn:
         row = conn.execute(
@@ -233,6 +239,7 @@ def run_flow(case) -> list:
     """跑完一串回答，返回 [(检查名, 是否通过)]。"""
     report, turns = None, 0
     ai_texts = []
+    no_chips = 0
     with TestClient(app) as c:
         cid = None
         print(f"\n—— [flow] {case['name']} ——")
@@ -244,7 +251,8 @@ def run_flow(case) -> list:
                 report = r["report"]
                 break
             ai_texts.append(r["text"])
-            print(f"🩺 {r['text']}")
+            no_chips += 0 if r.get("suggestions") else 1
+            _print_ai(r)
     checks = [("出了报告", report is not None)]
     if report:
         print("报告:", json.dumps(report, ensure_ascii=False))
@@ -273,6 +281,7 @@ def run_flow(case) -> list:
             checks.append((f"profile.{k} 含「{v}」", v in str(profile.get(k, ""))))
     ai_text = " ".join(ai_texts)
     checks.append(("没有空回复", all(t.strip() for t in ai_texts)))
+    checks.append((f"每轮都有快捷选项（缺 {no_chips} 轮）", no_chips == 0))
     checks.append(("没问设备/格式类发散问题", not any(k in ai_text for k in FILLER_WORDS)))
     checks.append(("对话里没漏字段名/旁白", not _leaks(ai_text)))
     return checks
@@ -293,7 +302,7 @@ def run_reply(case) -> list:
                 print(f"🩺 {last}")
                 break
             last = r["text"]
-            print(f"🩺 {last}")
+            _print_ai(r)
     checks = []
     if "any_of" in case:
         hit = any(k in last for k in case["any_of"])

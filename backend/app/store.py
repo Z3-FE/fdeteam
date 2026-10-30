@@ -55,6 +55,22 @@ def init_db() -> None:
             );
             """
         )
+        # 老库补列：已经用了几次"快捷选项兜底"
+        try:
+            conn.execute("ALTER TABLE conversations ADD COLUMN suggest_fallbacks INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+
+
+def use_suggest_fallback(conversation_id: str, limit: int) -> bool:
+    """占用一次兜底额度；该会话已用满 limit 次时返回 False。"""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE conversations SET suggest_fallbacks = COALESCE(suggest_fallbacks, 0) + 1 "
+            "WHERE id = ? AND COALESCE(suggest_fallbacks, 0) < ?",
+            (conversation_id, limit),
+        )
+        return cur.rowcount == 1
 
 
 def get_or_create_conversation(conversation_id: Optional[str], channel: str = "h5") -> str:

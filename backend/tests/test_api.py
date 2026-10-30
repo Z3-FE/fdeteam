@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app import store
 from app.main import app, _normalize_report, _split_suggestions
 
 
@@ -80,3 +81,10 @@ def test_lead():
         cid = r["conversationId"]
         j = c.post("/api/lead", json={"conversationId": cid, "channel": "sms", "phone": "13800001234"}).json()
         assert j["ok"] is True
+
+
+def test_suggest_fallback_limit_counts_uses():
+    with TestClient(app):
+        cid = store.get_or_create_conversation(None)
+        uses = [store.use_suggest_fallback(cid, 3) for _ in range(4)]
+        assert uses == [True, True, True, False]

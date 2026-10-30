@@ -67,7 +67,8 @@ async def generate_suggestions(history: list[dict], question: str) -> list[str]:
         {
             "role": "system",
             "content": "你在为一个业务问诊助手生成'快捷回答选项'。根据它刚问出的问题，"
-            "给 3 个用户可能的简短回答，每个 ≤8 字、口语化。只输出这 3 个选项，用 | 分隔，不要任何多余文字。",
+            "给 3 个用户可能的简短回答，每个 ≤8 字、口语化。选项是用户站在自己角度的回答，不要写成问句。"
+            "只输出这 3 个选项，用 | 分隔，不要任何多余文字。",
         },
         {"role": "user", "content": f"刚问的问题：{question}"},
     ]

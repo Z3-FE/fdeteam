@@ -924,6 +924,13 @@ p {
   color: var(--brand-dark);
 }
 
+.chip.is-picked {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+
 .composer {
   display: flex;
   align-items: center;

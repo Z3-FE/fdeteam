@@ -16,6 +16,7 @@ import { postChat } from '../../api/client';
 export default function Consult() {
   const [session, setSession] = useState<ConsultationSession>(() => loadSession());
   const [draft, setDraft] = useState('');
+  const [picked, setPicked] = useState<string[]>([]);
   const [thinking, setThinking] = useState(false);
   const [scrollInto, setScrollInto] = useState('');
   const finished = session.report !== null;
@@ -39,6 +40,7 @@ export default function Consult() {
       saveSession(withUser);
       setSession(withUser);
       setDraft('');
+      setPicked([]);
       setThinking(true);
       postChat(session.conversationId, text)
         .then((result) => {
@@ -73,6 +75,22 @@ export default function Consult() {
         : session.suggestions;
   const progress = completed ? 100 : Math.min(90, session.answers.length * 25);
   const sendDisabled = completed || thinking || draft.trim().length === 0;
+
+  // 选项可多选：选中追加到输入框（用"、"连接），再点一次取消并从输入框里去掉
+  const toggleChip = (chip: string) => {
+    if (picked.includes(chip)) {
+      setPicked(picked.filter((c) => c !== chip));
+      setDraft(
+        draft
+          .split('、')
+          .filter((part) => part.trim() !== chip)
+          .join('、'),
+      );
+    } else {
+      setPicked([...picked, chip]);
+      setDraft(draft.trim() ? `${draft.trim()}、${chip}` : chip);
+    }
+  };
 
   return (
     <View className="screen chat">
@@ -122,8 +140,12 @@ export default function Consult() {
         {chips.length > 0 && (
           <ScrollView className="chips" scrollX>
             {chips.map((chip) => (
-              <View key={chip} className="chip" onClick={() => setDraft(chip)}>
-                {chip}
+              <View
+                key={chip}
+                className={`chip ${picked.includes(chip) ? 'is-picked' : ''}`}
+                onClick={() => toggleChip(chip)}
+              >
+                {picked.includes(chip) ? `✓ ${chip}` : chip}
               </View>
             ))}
           </ScrollView>
