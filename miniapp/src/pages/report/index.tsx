@@ -74,11 +74,6 @@ export default function Report() {
             <Text className="cost-u">{report.costUnit}</Text>
           </View>
           <View className="cost-note">{report.costNote}</View>
-          {!lead && hasCost && (
-            <View className="cost-link" onClick={openSheet}>
-              让顾问帮我算算能省回多少 →
-            </View>
-          )}
         </View>
 
         <View className="report-section">
@@ -122,11 +117,6 @@ export default function Report() {
             {openQuestions.map((q) => (
               <View className="open-li" key={q}>? {q}</View>
             ))}
-            {!lead && (
-              <View className="btn btn-ghost open-btn" onClick={openSheet}>
-                找顾问把这些问清楚
-              </View>
-            )}
           </View>
         )}
 

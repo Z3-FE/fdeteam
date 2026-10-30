@@ -1793,13 +1793,7 @@ p {
   height: 38px;
 }
 
-/* 报告页留资入口：代价卡片内链接、待专家确认卡片、底部常驻按钮 */
-.cost-link {
-  margin-top: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--brand-dark);
-}
+/* 报告页留资入口：待专家确认卡片、底部常驻按钮 */
 .open-card {
   margin-bottom: 14px;
 }
@@ -1808,11 +1802,6 @@ p {
   line-height: 1.75;
   color: var(--ink-2);
   margin-top: 4px;
-}
-.open-btn {
-  margin-top: 12px;
-  height: 42px;
-  font-size: 14px;
 }
 .report.has-bar {
   padding-bottom: calc(96px + env(safe-area-inset-bottom));
