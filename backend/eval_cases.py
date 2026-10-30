@@ -5,8 +5,8 @@
 
 用法（需 .env 里有真实 SILICONFLOW_API_KEY）：
     cd backend
-    arch -arm64 ./.venv/bin/python eval_cases.py            # 跑全部用例
-    arch -arm64 ./.venv/bin/python eval_cases.py 2>/dev/null # 滤掉日志，只看结果
+    arch -arm64 ./.venv/bin/python eval_cases.py 2>/dev/null # 列出用例，输入编号选择（回车=全部）
+    arch -arm64 ./.venv/bin/python eval_cases.py all         # 不询问，直接跑全部
     arch -arm64 ./.venv/bin/python eval_cases.py flow        # 只跑 flow 类（完整问诊）
     arch -arm64 ./.venv/bin/python eval_cases.py reply       # 只跑 reply 类（边界/刁难）
     arch -arm64 ./.venv/bin/python eval_cases.py list        # 列出全部用例和编号（不调模型）
@@ -333,13 +333,21 @@ def _print_list() -> None:
 
 
 def main() -> int:
-    args = sys.argv[1:] or ["all"]
-    if args[0] == "list":
+    args = sys.argv[1:]
+    if args and args[0] == "list":
         _print_list()
         return 0
     if get_settings().mock:
         print("⚠ 当前 MOCK 模式（.env 没填 key），真实评测需先在 .env 填 SILICONFLOW_API_KEY。")
         return 2
+    if not args:
+        # 不带参数：列出用例，让用户输入编号选择
+        _print_list()
+        try:
+            line = input("\n输入要跑的编号（空格分隔，如 1 4 12；也可输入 flow / reply；直接回车=全部）：").strip()
+        except EOFError:
+            return 0
+        args = line.split() or ["all"]
     numbered = _numbered()
     if args[0] in ("all", "flow", "reply"):
         chosen = [(k, c) for _, k, c in numbered if args[0] in ("all", k)]
