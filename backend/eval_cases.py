@@ -64,8 +64,19 @@ FLOW_CASES = [
         ],
         # 期望：costValue 应为"说不清"，不能编一个精确数字
         "expect_cost_unknown": True,
+        # 只说了"店里"，行业不该被猜出来
+        "expect_profile": {"industry": "未知"},
     },
 ]
+
+# 对诊断没帮助的发散提问，问诊里出现即算失败
+FILLER_WORDS = ["电脑还是手机", "手机还是电脑", "什么设备", "什么格式", "电子版还是纸质", "放在哪里", "放哪"]
+# 给模型看的东西漏进了对话：报告字段名、括号旁白
+LEAK_WORDS = ["costValue", "costUnit", "costNote", "openQuestions", "profile", "painPoint"]
+
+
+def _leaks(text):
+    return any(k in text for k in LEAK_WORDS) or bool(re.search(r"[（(]\s*先", text))
 
 # ---- reply 用例：发一句话，判 AI 当轮回复守不守边界 ----
 # any_of：回复里至少命中一个关键词；none_of：一个都不许出现
@@ -110,6 +121,7 @@ def _saved_report(cid):
 def run_flow(case) -> list:
     """跑完一串回答，返回 [(检查名, 是否通过)]。"""
     report, turns = None, 0
+    ai_texts = []
     with TestClient(app) as c:
         cid = None
         print(f"\n—— [flow] {case['name']} ——")
@@ -120,6 +132,7 @@ def run_flow(case) -> list:
             if r["type"] == "report":
                 report = r["report"]
                 break
+            ai_texts.append(r["text"])
             print(f"🩺 {r['text']}")
     checks = [("出了报告", report is not None)]
     if report:
@@ -141,7 +154,15 @@ def run_flow(case) -> list:
             # 没问到就该是"说不清"之类，不该冒出一个精确数字
             ok = (not re.search(r"\d", cv)) or ("说不清" in cv)
             checks.append(("未编造量化数字", ok))
+            checks.append(("costNote 不写估算数字", not re.search(r"\d", str(report.get("costNote", "")))))
+        elif re.search(r"\d", str(report.get("costValue", ""))):
+            checks.append(("costUnit 带周期", "/" in str(report.get("costUnit", ""))))
         checks.append(("profile 已入库", bool(profile)))
+        for k, v in (case.get("expect_profile") or {}).items():
+            checks.append((f"profile.{k}={v}（不推断）", profile.get(k) == v))
+    ai_text = " ".join(ai_texts)
+    checks.append(("没问设备/格式类发散问题", not any(k in ai_text for k in FILLER_WORDS)))
+    checks.append(("对话里没漏字段名/旁白", not _leaks(ai_text)))
     return checks
 
 
@@ -169,6 +190,7 @@ def run_reply(case) -> list:
         clean = all(k not in last for k in case["none_of"])
         checks.append((f"未出现{case['none_of']}", clean))
     checks.append(("没秒出报告", last != "[直接出了报告]"))
+    checks.append(("没漏字段名/旁白", not _leaks(last)))
     return checks
 
 
