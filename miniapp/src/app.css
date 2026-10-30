@@ -1792,3 +1792,38 @@ p {
 .sheet-tab {
   height: 38px;
 }
+
+/* 报告页留资入口：代价卡片内链接、待专家确认卡片、底部常驻按钮 */
+.cost-link {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+.open-card {
+  margin-bottom: 14px;
+}
+.open-li {
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+.open-btn {
+  margin-top: 12px;
+  height: 42px;
+  font-size: 14px;
+}
+.report.has-bar {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+.report-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  padding: 10px 18px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(250, 248, 246, 0.96);
+  border-top: 1px solid var(--line);
+}

@@ -24,6 +24,7 @@ class Report(BaseModel):
     costUnit: str = ""
     costNote: str = ""
     directions: list[Direction] = []
+    openQuestions: list[str] = []
 
 
 class ChatMessageResponse(BaseModel):

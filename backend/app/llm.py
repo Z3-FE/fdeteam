@@ -150,6 +150,8 @@ def _mock_reply(history: list[dict]) -> str:
                     "actions": ["分三档，各配一个处理间隔", "把重点对象单独打标优先处理"],
                 },
             ],
+            "openQuestions": ["共享表用现成工具还是要定制，取决于每天多少条记录（MOCK 数据）"],
+            "profile": {"industry": "未知", "budget": "未知", "urgency": "未知"},
         },
     }
     return "我把你说的理了一遍，都写进报告了。\n```json\n" + json.dumps(report, ensure_ascii=False) + "\n```"

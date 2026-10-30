@@ -27,6 +27,15 @@ def test_normalize_report_fixes_bad_confidence():
 def test_normalize_report_empty_directions():
     r = _normalize_report({})
     assert len(r["directions"]) == 1  # 至少补一个占位
+    assert r["openQuestions"] == []
+    assert r["profile"]["budget"] == "未知"
+
+
+def test_normalize_report_profile_and_questions():
+    r = _normalize_report({"openQuestions": ["a", "", "b", "c", "d"], "profile": {"budget": "几千块"}})
+    assert r["openQuestions"] == ["a", "b", "c"]  # 去空、最多 3 个
+    assert r["profile"]["budget"] == "几千块"
+    assert r["profile"]["industry"] == "未知"
 
 
 # ---- 接口集成测（MOCK 模式）----
@@ -61,6 +70,8 @@ def test_flow_reaches_report():
         assert len(rep["directions"]) >= 1
         for d in rep["directions"]:
             assert d["confidence"] in ("高", "中", "低")
+        assert len(rep["openQuestions"]) >= 1
+        assert "profile" not in rep  # profile 只入库，不给用户端
 
 
 def test_lead():

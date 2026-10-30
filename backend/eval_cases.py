@@ -24,6 +24,7 @@ os.environ.setdefault("DB_PATH", "./data/eval_cases.db")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import store  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -98,6 +99,14 @@ def _chat(client, cid, msg):
     return r, r["conversationId"]
 
 
+def _saved_report(cid):
+    with store._connect() as conn:
+        row = conn.execute(
+            "SELECT report_json FROM briefs WHERE conversation_id = ? ORDER BY id DESC LIMIT 1", (cid,)
+        ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
 def run_flow(case) -> list:
     """跑完一串回答，返回 [(检查名, 是否通过)]。"""
     report, turns = None, 0
@@ -115,6 +124,9 @@ def run_flow(case) -> list:
     checks = [("出了报告", report is not None)]
     if report:
         print("报告:", json.dumps(report, ensure_ascii=False))
+        # profile 不返回给用户端，从库里取出来给 FDE 看的那份
+        profile = (_saved_report(cid) or {}).get("profile") or {}
+        print("profile(FDE):", json.dumps(profile, ensure_ascii=False))
         dirs = report.get("directions", [])
         checks += [
             ("有核心痛点", bool(report.get("painPoint"))),
@@ -122,12 +134,14 @@ def run_flow(case) -> list:
             ("至少1个方向", len(dirs) >= 1),
             ("方向含根因+行动", all(d.get("causes") and d.get("actions") for d in dirs)),
             ("置信度合法", all(d.get("confidence") in ("高", "中", "低") for d in dirs)),
+            ("有待专家确认的问题", len(report.get("openQuestions") or []) >= 1),
         ]
         if case.get("expect_cost_unknown"):
             cv = str(report.get("costValue", ""))
             # 没问到就该是"说不清"之类，不该冒出一个精确数字
             ok = (not re.search(r"\d", cv)) or ("说不清" in cv)
             checks.append(("未编造量化数字", ok))
+        checks.append(("profile 已入库", bool(profile)))
     return checks
 
 

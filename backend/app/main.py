@@ -25,6 +25,8 @@ OPENING_MESSAGE = (
 
 app = FastAPI(title="问题梳理 · 业务问诊 API")
 
+PROFILE_KEYS = ("industry", "teamSize", "budget", "urgency", "decisionMaker", "currentTools")
+
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +65,8 @@ def _normalize_report(raw: dict) -> dict:
         )
     if not dirs:
         dirs = [{"title": "未命名方向", "confidence": "中", "summary": "", "causes": [], "actions": []}]
+    raw_profile = raw.get("profile") if isinstance(raw.get("profile"), dict) else {}
+    profile = {k: (str(raw_profile.get(k, "")).strip() or "未知") for k in PROFILE_KEYS}
     return {
         "sceneLabel": str(raw.get("sceneLabel", "")).strip(),
         "painPoint": str(raw.get("painPoint", "")).strip(),
@@ -71,6 +75,9 @@ def _normalize_report(raw: dict) -> dict:
         "costUnit": str(raw.get("costUnit", "")).strip(),
         "costNote": str(raw.get("costNote", "")).strip(),
         "directions": dirs,
+        "openQuestions": [str(q).strip() for q in (raw.get("openQuestions") or []) if str(q).strip()][:3],
+        # profile 只入库给 FDE 看，不返回给用户端
+        "profile": profile,
     }
 
 
@@ -105,7 +112,8 @@ async def chat(req: ChatRequest):
     if report is not None:
         normalized = _normalize_report(report)
         store.save_report(conv_id, normalized)
-        return ChatReportResponse(conversationId=conv_id, paid=False, report=Report(**normalized))
+        public = {k: v for k, v in normalized.items() if k != "profile"}
+        return ChatReportResponse(conversationId=conv_id, paid=False, report=Report(**public))
 
     cleaned, suggestions = _split_suggestions(reply)
     if not suggestions:

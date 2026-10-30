@@ -36,6 +36,7 @@ interface BackendReport {
   costUnit: string;
   costNote: string;
   directions: BackendDirection[];
+  openQuestions?: string[];
 }
 
 function normConfidence(value: string): Confidence {
@@ -60,6 +61,7 @@ function mapReport(raw: BackendReport): DiagnosisReport {
     costUnit: raw.costUnit,
     costNote: raw.costNote,
     directions,
+    openQuestions: raw.openQuestions || [],
     createdAt: Date.now(),
   };
 }

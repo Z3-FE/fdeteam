@@ -29,6 +29,7 @@ export interface DiagnosisReport {
   costUnit: string;
   costNote: string;
   directions: Direction[];
+  openQuestions?: string[];
   createdAt: number;
 }
 

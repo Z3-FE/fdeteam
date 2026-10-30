@@ -31,6 +31,13 @@ export default function Report() {
   }
 
   const dateLabel = formatReportDate(report.createdAt);
+  const openQuestions = report.openQuestions || [];
+  // 只有对方真给过数字时才拿代价做文案，"说不清"时退回通用说法，不编数字
+  const hasCost = /\d/.test(report.costValue);
+  const ctaTitle = hasCost
+    ? `这件事的代价是 ${report.costValue} ${report.costUnit}，值得找人看看`
+    : '想真正解决它？让专业的人帮你';
+  const openSheet = () => setSheetOpen(true);
 
   const handleLeadSuccess = (next: Lead) => {
     const updated = { ...session, lead: next };
@@ -40,7 +47,7 @@ export default function Report() {
   };
 
   return (
-    <View className="screen report">
+    <View className={`screen report ${lead ? '' : 'has-bar'}`}>
       <View className="report-inner">
         <View style={{ textAlign: 'right', marginBottom: '4px' }} onClick={() => redirect('chat')}>
           <Text className="text-btn">↻ 重新诊断</Text>
@@ -67,6 +74,11 @@ export default function Report() {
             <Text className="cost-u">{report.costUnit}</Text>
           </View>
           <View className="cost-note">{report.costNote}</View>
+          {!lead && hasCost && (
+            <View className="cost-link" onClick={openSheet}>
+              让顾问帮我算算能省回多少 →
+            </View>
+          )}
         </View>
 
         <View className="report-section">
@@ -104,8 +116,22 @@ export default function Report() {
           </View>
         </View>
 
+        {openQuestions.length > 0 && (
+          <View className="card open-card">
+            <View className="card-label">这几件事，要专家看过你的情况才能定</View>
+            {openQuestions.map((q) => (
+              <View className="open-li" key={q}>? {q}</View>
+            ))}
+            {!lead && (
+              <View className="btn btn-ghost open-btn" onClick={openSheet}>
+                找顾问把这些问清楚
+              </View>
+            )}
+          </View>
+        )}
+
         <View className="card cta-card">
-          <View className="cta-title">想真正解决它？让专业的人帮你</View>
+          <View className="cta-title">{ctaTitle}</View>
           <View className="cta-desc">把这份诊断交给顾问，30 分钟内先聊清楚卡在哪，不推销、不催单。</View>
           {lead ? (
             <View className="lead-done">
@@ -118,7 +144,7 @@ export default function Report() {
               </View>
             </View>
           ) : (
-            <View className="btn btn-primary" onClick={() => setSheetOpen(true)}>
+            <View className="btn btn-primary" onClick={openSheet}>
               让顾问帮我看看
             </View>
           )}
@@ -130,6 +156,14 @@ export default function Report() {
 
         <View className="disclaimer">方向仅供参考，具体方案由专家确认。</View>
       </View>
+
+      {!lead && (
+        <View className="report-bar">
+          <View className="btn btn-primary" onClick={openSheet}>
+            免费找顾问聊 30 分钟
+          </View>
+        </View>
+      )}
 
       <LeadSheet
         open={sheetOpen}
