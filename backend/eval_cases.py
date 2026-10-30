@@ -9,7 +9,9 @@
     arch -arm64 ./.venv/bin/python eval_cases.py 2>/dev/null # 滤掉日志，只看结果
     arch -arm64 ./.venv/bin/python eval_cases.py flow        # 只跑 flow 类（完整问诊）
     arch -arm64 ./.venv/bin/python eval_cases.py reply       # 只跑 reply 类（边界/刁难）
-    arch -arm64 ./.venv/bin/python eval_cases.py 装修        # 按名字片段只跑某几个用例
+    arch -arm64 ./.venv/bin/python eval_cases.py list        # 列出全部用例和编号（不调模型）
+    arch -arm64 ./.venv/bin/python eval_cases.py 4           # 按编号跑某一个
+    arch -arm64 ./.venv/bin/python eval_cases.py 1 4 12      # 按编号跑多个
 
 每个用例的 turns 就是"用户说的话"，也可以直接复制到小程序里手动测。
 
@@ -319,24 +321,44 @@ def _report(title, results) -> int:
     return 0 if passed == total else 1
 
 
+def _numbered():
+    """全部用例按顺序编号：flow 在前、reply 在后，返回 [(编号, 类型, 用例)]。"""
+    items = [("flow", c) for c in FLOW_CASES] + [("reply", c) for c in REPLY_CASES]
+    return [(i, kind, c) for i, (kind, c) in enumerate(items, 1)]
+
+
+def _print_list() -> None:
+    for i, kind, c in _numbered():
+        print(f"{i:>3}  [{kind}] {c['name']}")
+
+
 def main() -> int:
+    args = sys.argv[1:] or ["all"]
+    if args[0] == "list":
+        _print_list()
+        return 0
     if get_settings().mock:
         print("⚠ 当前 MOCK 模式（.env 没填 key），真实评测需先在 .env 填 SILICONFLOW_API_KEY。")
         return 2
-    which = sys.argv[1] if len(sys.argv) > 1 else "all"
-    flow, reply = FLOW_CASES, REPLY_CASES
-    if which not in ("all", "flow", "reply"):
-        # 按名字片段筛单个/几个用例，如：eval_cases.py 装修
-        flow = [c for c in FLOW_CASES if which in c["name"]]
-        reply = [c for c in REPLY_CASES if which in c["name"]]
-        if not flow and not reply:
-            print(f"没有名字包含「{which}」的用例")
+    numbered = _numbered()
+    if args[0] in ("all", "flow", "reply"):
+        chosen = [(k, c) for _, k, c in numbered if args[0] in ("all", k)]
+    else:
+        # 按编号选：eval_cases.py 1 3 12
+        by_no = {i: (k, c) for i, k, c in numbered}
+        bad = [a for a in args if not a.isdigit() or int(a) not in by_no]
+        if bad:
+            print(f"无效编号：{' '.join(bad)}（编号 1~{len(numbered)}）。可用编号：")
+            _print_list()
             return 2
+        chosen = [by_no[int(a)] for a in args]
     rc = 0
-    if which != "reply" and flow:
+    flow = [c for k, c in chosen if k == "flow"]
+    reply = [c for k, c in chosen if k == "reply"]
+    if flow:
         res = [(c["name"], run_flow(c)) for c in flow]
         rc |= _report("flow（完整问诊）结果", res)
-    if which != "flow" and reply:
+    if reply:
         res = [(c["name"], run_reply(c)) for c in reply]
         rc |= _report("reply（边界/刁难）结果", res)
     return rc
