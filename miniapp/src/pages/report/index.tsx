@@ -3,6 +3,7 @@ import { Text, View } from '@tarojs/components';
 import { LeadSheet } from '../../components/LeadSheet';
 import { IconCheck, IconShield, IconSpark } from '../../components/icons';
 import { formatReportDate, loadSession, maskPhone, type Confidence, type Lead } from '../../data/consultation';
+import { MOCK_REPORT } from '../../data/mockReport';
 import { redirect } from '../../utils/nav';
 
 const TAG_CLASS: Record<Confidence, string> = {
@@ -12,7 +13,11 @@ const TAG_CLASS: Record<Confidence, string> = {
 };
 
 export default function Report() {
-  const [session, setSession] = useState(() => loadSession());
+  const [session, setSession] = useState(() => {
+    const loaded = loadSession();
+    // 演示入口：没有真实报告时直接用 mock 数据展示，不写入本地存储
+    return loaded.report ? loaded : { ...loaded, report: MOCK_REPORT, lead: null };
+  });
   const [sheetOpen, setSheetOpen] = useState(false);
   const report = session.report;
   const lead: Lead | null = session.lead;
@@ -49,10 +54,10 @@ export default function Report() {
   return (
     <View className={`screen report ${lead ? '' : 'has-bar'}`}>
       <View className="report-inner">
-        <View style={{ textAlign: 'right', marginBottom: '4px' }} onClick={() => redirect('chat')}>
-          <Text className="text-btn">↻ 重新诊断</Text>
+        <View className="report-head">
+          <View className="report-lead">我帮你理了一下，你看对不对。</View>
+          <Text className="text-btn" onClick={() => redirect('chat')}>↻ 重新诊断</Text>
         </View>
-        <View className="report-lead">我帮你理了一下，你看对不对。</View>
         <View className="report-meta">
           <Text className="meta-chip">{dateLabel || '刚刚生成'}</Text>
           <Text className="meta-chip meta-chip-soft">{report.sceneLabel}</Text>
@@ -78,8 +83,7 @@ export default function Report() {
 
         <View className="report-section">
           <View className="section-head">
-            <View className="sh-title">初诊方向</View>
-            <Text className="sh-sub">先按可能性排了序</Text>
+            <View className="sh-title">提效方案</View>
           </View>
           <View className="directions">
             {report.directions.map((direction, index) => (
@@ -87,8 +91,8 @@ export default function Report() {
                 <View className="dir-head">
                   <Text className="dir-index">{index + 1}</Text>
                   <View className="dir-title">{direction.title}</View>
+                  <Text className={TAG_CLASS[direction.confidence]}>{direction.confidence}置信度</Text>
                 </View>
-                <Text className={TAG_CLASS[direction.confidence]}>{direction.confidence}置信度</Text>
                 <View className="dir-summary">{direction.summary}</View>
                 {direction.causes.length > 0 && (
                   <View className="dir-block">
@@ -100,7 +104,7 @@ export default function Report() {
                 )}
                 {direction.actions.length > 0 && (
                   <View className="dir-block">
-                    <View className="dir-block-h">可以先动的地方</View>
+                    <View className="dir-block-h">做出来能干什么</View>
                     {direction.actions.map((a) => (
                       <View className="dir-li dir-li-do" key={a}>✓ {a}</View>
                     ))}

@@ -73,7 +73,8 @@ export default function Consult() {
       : session.answers.length === 0 && session.suggestions.length === 0
         ? SCENE_CHIPS
         : session.suggestions;
-  const progress = completed ? 100 : Math.min(90, session.answers.length * 25);
+  // 按一般 6 轮问完来走进度，出报告前最多到 90%
+  const progress = completed ? 100 : Math.min(90, Math.round((session.answers.length / 6) * 90));
   const sendDisabled = completed || thinking || draft.trim().length === 0;
 
   // 选项可多选：选中追加到输入框（用"、"连接），再点一次取消并从输入框里去掉

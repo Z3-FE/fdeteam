@@ -29,3 +29,6 @@ backend/data/
 .idea/
 .vscode/
 .history/
+
+# 本地预览启动配置
+.claude/launch.json

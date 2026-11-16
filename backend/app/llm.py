@@ -5,22 +5,28 @@ from typing import Optional
 import httpx
 
 from .config import get_settings
-from .prompt import SYSTEM_PROMPT
+from .prompt import FORCE_REPORT_PROMPT, SYSTEM_PROMPT, TURN_REMINDER_PROMPT
 
 
-def build_messages(history: list[dict]) -> list[dict]:
-    """history: [{role: 'user'|'assistant', content}] -> OpenAI messages."""
-    return [{"role": "system", "content": SYSTEM_PROMPT}, *history]
+def build_messages(history: list[dict], force_report: bool = False, extra: Optional[str] = None) -> list[dict]:
+    """history: [{role: 'user'|'assistant', content}] -> OpenAI messages。
+    末尾追加一条系统指令：平时是每轮自查提醒；force_report=True 时改为要求这一轮直接出报告。
+    extra：上一次回复不合格时，后端追加的纠正说明。"""
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history]
+    messages.append({"role": "system", "content": FORCE_REPORT_PROMPT if force_report else TURN_REMINDER_PROMPT})
+    if extra:
+        messages.append({"role": "system", "content": extra})
+    return messages
 
 
-async def complete(history: list[dict]) -> str:
+async def complete(history: list[dict], force_report: bool = False, extra: Optional[str] = None) -> str:
     settings = get_settings()
     if settings.mock:
-        return _mock_reply(history)
+        return _mock_reply(history, force_report)
 
     payload = {
         "model": settings.model_name,
-        "messages": build_messages(history),
+        "messages": build_messages(history, force_report, extra),
         "temperature": 0.4,
         "stream": False,
     }
@@ -114,10 +120,10 @@ _MOCK_SCENES = [
 ]
 
 
-def _mock_reply(history: list[dict]) -> str:
+def _mock_reply(history: list[dict], force_report: bool = False) -> str:
     user_turns = [m for m in history if m.get("role") == "user"]
     n = len(user_turns)
-    if n <= len(_MOCK_FOLLOWUPS):
+    if n <= len(_MOCK_FOLLOWUPS) and not force_report:
         return _MOCK_FOLLOWUPS[n - 1]
 
     text = " ".join(m.get("content", "") for m in user_turns)

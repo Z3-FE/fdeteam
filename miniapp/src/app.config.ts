@@ -1,8 +1,8 @@
 export default defineAppConfig({
   pages: [
+    'pages/report/index',
     'pages/landing/index',
     'pages/consult/index',
-    'pages/report/index',
     'pages/success/index',
   ],
   window: {

@@ -225,141 +225,117 @@ p {
   padding: 0 0 30px;
 }
 
-.land-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 20px 0;
-}
-
-.land-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.land-brand-mark {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  background: linear-gradient(160deg, #ffa287, var(--brand));
-  color: #fff;
-  box-shadow: 0 6px 14px rgba(232, 92, 63, 0.28);
-}
-
-.land-brand-name {
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
-}
-
-.land-brand-sub {
-  font-size: 10.5px;
-  line-height: 1.45;
-  color: var(--ink-3);
-}
-
-.land-badge {
-  display: none;
-}
-
 .hero {
-  padding: 36px 20px 0;
+  padding: 40px 24px 0;
 }
 
 .hero-title {
-  font-size: clamp(23px, 6.4vw, 29px);
-  line-height: 1.44;
+  font-size: clamp(22px, 7vw, 30px);
+  line-height: 1.42;
+  white-space: nowrap;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 
 .hero-sub {
-  margin-top: 12px;
-  font-size: 14px;
-  line-height: 1.78;
+  margin-top: 10px;
+  font-size: 14.5px;
+  line-height: 1.7;
   color: var(--ink-2);
 }
 
 .hero-stage {
   position: relative;
+  flex: 1;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  margin: 22px 0 8px;
+  padding: 18px 0 6px;
 }
 
 .hero-stage::before {
   content: '';
   position: absolute;
-  top: 6px;
+  top: 50%;
   left: 50%;
-  width: 230px;
-  height: 180px;
-  transform: translateX(-50%);
+  width: 300px;
+  height: 260px;
+  transform: translate(-50%, -38%);
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, #ffe6db 0%, rgba(255, 241, 236, 0) 72%);
+  background: radial-gradient(circle at 50% 50%, #ffe6db 0%, rgba(255, 241, 236, 0) 70%);
 }
 
-.hero-stage svg {
+/* 小精灵头顶的对话气泡 */
+.hero-bubble {
+  position: relative;
+  max-width: 260px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(232, 92, 63, 0.12);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  animation: bubble-float 4s ease-in-out infinite;
+}
+
+.hero-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: #fff;
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+
+@keyframes bubble-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* 落地页 Canvas 小精灵，宽高比和 Sprite.tsx 里的 W/H（220×180）一致 */
+.hero-sprite {
   position: relative;
   display: block;
-  width: 190px;
-  height: 182px;
-}
-
-.hero-bubble {
-  animation: float 5s ease-in-out infinite;
+  width: 286px;
+  height: 234px;
 }
 
 .landing .accent {
   color: var(--brand-dark);
 }
 
-.land-features {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 22px 18px 0;
-}
-
-.land-feature {
+.land-tags {
   display: flex;
-  align-items: flex-start;
-  gap: 7px;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 20px 0;
 }
 
-.feature-icon {
-  flex: none;
+.land-tag {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
   border: 1px solid #ffd9cb;
   background: #fff;
-  color: #ec5a38;
-}
-
-.feature-title {
   font-size: 12.5px;
-  font-weight: 700;
-  line-height: 1.45;
-  white-space: nowrap;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
-.feature-text {
-  margin-top: 1px;
-  font-size: 9.5px;
-  line-height: 1.55;
-  color: var(--ink-3);
+.land-tag .qb-icon {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ec5a38;
 }
 
 .land-cta-wrap {
@@ -1003,6 +979,13 @@ p {
   padding: 14px 18px 0;
 }
 
+.report-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .report-lead {
   font-size: 15px;
   color: var(--ink-2);
@@ -1011,7 +994,7 @@ p {
 .report-meta {
   display: flex;
   gap: 8px;
-  margin: 10px 0 16px;
+  margin: 12px 0 16px;
 }
 
 .meta-chip {
@@ -1031,6 +1014,7 @@ p {
 .card {
   background: var(--card);
   border-radius: var(--r-card);
+  border: 1px solid var(--line-2);
   box-shadow: var(--shadow-1);
   padding: 16px;
 }
@@ -1047,14 +1031,12 @@ p {
 
 .pain-card {
   margin-bottom: 12px;
-  border: 1px solid #ffe4d9;
-  background: linear-gradient(180deg, #fffaf7, #ffffff 55%);
 }
 
 .pain-text {
   margin-top: 10px;
-  font-size: 21px;
-  line-height: 1.52;
+  font-size: 17px;
+  line-height: 1.6;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -1133,7 +1115,7 @@ p {
 
 .dir-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 9px;
 }
 
@@ -1144,7 +1126,6 @@ p {
   justify-content: center;
   width: 20px;
   height: 20px;
-  margin-top: 2px;
   border-radius: 7px;
   background: var(--brand-soft);
   color: var(--brand-dark);
@@ -1160,8 +1141,8 @@ p {
 }
 
 .tag {
+  flex: none;
   display: inline-block;
-  margin: 8px 0 0 29px;
   padding: 2px 9px;
   border-radius: 999px;
   font-size: 11px;
