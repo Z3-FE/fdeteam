@@ -98,15 +98,21 @@ export default function Report() {
                   <View className="dir-block">
                     <View className="dir-block-h">为什么会这样</View>
                     {direction.causes.map((c) => (
-                      <View className="dir-li" key={c}>· {c}</View>
+                      <View className="dir-li" key={c}>
+                        <Text className="li-dot" />
+                        <Text className="li-text">{c}</Text>
+                      </View>
                     ))}
                   </View>
                 )}
                 {direction.actions.length > 0 && (
-                  <View className="dir-block">
+                  <View className="dir-block dir-block-do">
                     <View className="dir-block-h">做出来能干什么</View>
                     {direction.actions.map((a) => (
-                      <View className="dir-li dir-li-do" key={a}>✓ {a}</View>
+                      <View className="dir-li dir-li-do" key={a}>
+                        <Text className="li-check">✓</Text>
+                        <Text className="li-text">{a}</Text>
+                      </View>
                     ))}
                   </View>
                 )}
@@ -119,7 +125,10 @@ export default function Report() {
           <View className="card open-card">
             <View className="card-label">这几件事，要专家看过你的情况才能定</View>
             {openQuestions.map((q) => (
-              <View className="open-li" key={q}>? {q}</View>
+              <View className="open-li" key={q}>
+                <Text className="li-q">?</Text>
+                <Text className="li-text">{q}</Text>
+              </View>
             ))}
           </View>
         )}
