@@ -1,8 +1,10 @@
+import Taro from '@tarojs/taro';
 import { useState } from 'react';
-import { Text, View } from '@tarojs/components';
+import { Input, Text, View } from '@tarojs/components';
 import { LeadSheet } from '../../components/LeadSheet';
 import { IconCheck, IconShield, IconSpark } from '../../components/icons';
-import { formatReportDate, loadSession, maskPhone, type Confidence, type Lead } from '../../data/consultation';
+import { formatReportDate, loadSession, maskPhone, resetSession, saveSession, type Confidence, type Lead } from '../../data/consultation';
+import { submitReportFeedback } from '../../api/client';
 import { MOCK_REPORT } from '../../data/mockReport';
 import { redirect } from '../../utils/nav';
 
@@ -19,6 +21,9 @@ export default function Report() {
     return loaded.report ? loaded : { ...loaded, report: MOCK_REPORT, lead: null };
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackDraft, setFeedbackDraft] = useState('');
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
   const report = session.report;
   const lead: Lead | null = session.lead;
 
@@ -44,6 +49,47 @@ export default function Report() {
     : '想真正解决它？让专业的人帮你';
   const openSheet = () => setSheetOpen(true);
 
+  const restart = () => {
+    resetSession();
+    redirect('chat');
+  };
+
+  const markAccurate = async () => {
+    if (!session.conversationId || feedbackLoading) return;
+    setFeedbackLoading(true);
+    try {
+      await submitReportFeedback(session.conversationId, 'accurate');
+      const updated = { ...session, reportFeedback: 'accurate' as const };
+      setSession(updated);
+      saveSession(updated);
+    } catch {
+      Taro.showToast({ title: '网络开小差了，再点一次', icon: 'none' });
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
+  const regenerateReport = async () => {
+    const correction = feedbackDraft.trim();
+    if (!session.conversationId || !correction || feedbackLoading) return;
+    setFeedbackLoading(true);
+    try {
+      const nextReport = await submitReportFeedback(session.conversationId, 'correct', correction);
+      if (!nextReport) throw new Error('missing report');
+      const updated = { ...session, report: nextReport, reportFeedback: 'corrected' as const };
+      setSession(updated);
+      saveSession(updated);
+      setFeedbackOpen(false);
+      setFeedbackDraft('');
+      Taro.pageScrollTo({ scrollTop: 0, duration: 250 });
+      Taro.showToast({ title: '已根据补充重新生成', icon: 'success' });
+    } catch {
+      Taro.showToast({ title: '重新生成失败，请再试一次', icon: 'none' });
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
   const handleLeadSuccess = (next: Lead) => {
     const updated = { ...session, lead: next };
     setSession(updated);
@@ -56,7 +102,7 @@ export default function Report() {
       <View className="report-inner">
         <View className="report-head">
           <View className="report-lead">我帮你理了一下，你看对不对。</View>
-          <Text className="text-btn" onClick={() => redirect('chat')}>↻ 重新诊断</Text>
+          <Text className="text-btn" onClick={restart}>↻ 重新诊断</Text>
         </View>
         <View className="report-meta">
           <Text className="meta-chip">{dateLabel || '刚刚生成'}</Text>
@@ -132,6 +178,49 @@ export default function Report() {
             ))}
           </View>
         )}
+
+        {session.conversationId && <View className="card report-feedback-card">
+          {session.reportFeedback === 'corrected' ? (
+            <>
+              <View className="report-feedback-title">已根据你的补充重新生成</View>
+              <View className="report-feedback-desc">这版已用上你刚才补充的信息，更多实施细节可以继续和 FDE 顾问确认。</View>
+            </>
+          ) : session.reportFeedback === 'accurate' ? (
+            <>
+              <View className="report-feedback-title">谢谢确认</View>
+              <View className="report-feedback-desc">具体怎么做、需要对接哪些系统，可以继续和 FDE 顾问聊。</View>
+            </>
+          ) : (
+            <>
+              <View className="report-feedback-title">这份分析符合你的实际情况吗？</View>
+              {!feedbackOpen ? (
+                <View className="report-feedback-actions">
+                  <View className="btn btn-primary" onClick={markAccurate}>比较准确</View>
+                  <View className="btn btn-ghost" onClick={() => setFeedbackOpen(true)}>不准确，补充一下</View>
+                </View>
+              ) : (
+                <View className="report-feedback-form">
+                  <View className="report-feedback-desc">哪一点不准确？补充一句就行。</View>
+                  <Input
+                    className="report-feedback-input"
+                    value={feedbackDraft}
+                    disabled={feedbackLoading}
+                    placeholder="例如：不接微信群，希望直接放在 CRM 里"
+                    confirmType="send"
+                    onInput={(e) => setFeedbackDraft(e.detail.value)}
+                    onConfirm={regenerateReport}
+                  />
+                  <View
+                    className={feedbackDraft.trim() && !feedbackLoading ? 'btn btn-primary' : 'btn btn-primary is-disabled'}
+                    onClick={() => feedbackDraft.trim() && !feedbackLoading && regenerateReport()}
+                  >
+                    {feedbackLoading ? '正在重新生成…' : '重新生成报告'}
+                  </View>
+                </View>
+              )}
+            </>
+          )}
+        </View>}
 
         <View className="card cta-card">
           <View className="cta-title">{ctaTitle}</View>

@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     conversationId: Optional[str] = Field(default=None)
-    message: str
+    message: str = ""
+    action: Optional[Literal["confirm_understanding", "correct_understanding"]] = None
 
 
 class Direction(BaseModel):
@@ -41,10 +42,23 @@ class ChatReportResponse(BaseModel):
     report: Report
 
 
+class ChatConfirmationResponse(BaseModel):
+    type: Literal["confirmation"] = "confirmation"
+    conversationId: str
+    text: str
+    suggestions: list[str] = ["对，就是这个", "不对，有点问题"]
+
+
 class LeadRequest(BaseModel):
     conversationId: str
     channel: Literal["wechat", "sms"]
     phone: str
+
+
+class ReportFeedbackRequest(BaseModel):
+    conversationId: str
+    action: Literal["accurate", "correct"]
+    correction: str = ""
 
 
 class OkResponse(BaseModel):

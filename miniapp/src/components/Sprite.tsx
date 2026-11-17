@@ -15,8 +15,9 @@ const CY = 88;
 const R = 42;
 
 const GOLD = '#ffd36e';
+const CYAN = '#7ee8fa';
 const TONGUE = '#ff6b8a';
-const ORBIT_COLORS = [GOLD, '#ffb59a', '#ffffff'];
+const ORBIT_COLORS = [CYAN, '#9cc0ff', '#ffffff'];
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -311,8 +312,8 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
     // 外层光晕
     const halo = ctx.createRadialGradient(CX, CY, r * 0.6, CX, CY, r * 2);
     const hk = expr === 'sleepy' ? 0.18 : 0.35 + listen * 0.2 + tap * 0.3;
-    halo.addColorStop(0, `rgba(255, 140, 100, ${hk})`);
-    halo.addColorStop(1, 'rgba(255, 140, 100, 0)');
+    halo.addColorStop(0, `rgba(64, 140, 255, ${hk})`);
+    halo.addColorStop(1, 'rgba(64, 140, 255, 0)');
     ctx.fillStyle = halo;
     ctx.beginPath();
     ctx.arc(CX, CY, r * 2, 0, Math.PI * 2);
@@ -321,7 +322,7 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
     // 点击涟漪
     for (const t of ripples) {
       const p = t / 1.2;
-      ctx.strokeStyle = `rgba(255, 122, 89, ${0.6 * (1 - p)})`;
+      ctx.strokeStyle = `rgba(47, 107, 255, ${0.6 * (1 - p)})`;
       ctx.lineWidth = 2.5 * (1 - p) + 0.5;
       ctx.beginPath();
       ctx.arc(CX, CY, r + p * 48, 0, Math.PI * 2);
@@ -334,15 +335,15 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
     ctx.save();
     shape(r, amp);
     const g = ctx.createRadialGradient(CX - r * 0.35, CY - r * 0.4, r * 0.1, CX, CY, r * 1.1);
-    g.addColorStop(0, '#ffe0cf');
-    g.addColorStop(0.45, '#ff9a76');
-    g.addColorStop(1, '#f2643f');
+    g.addColorStop(0, '#d6f6ff');
+    g.addColorStop(0.45, '#5b8cff');
+    g.addColorStop(1, '#1d4ed8');
     ctx.fillStyle = g;
     ctx.fill();
     ctx.clip();
     const blobs: [number, number, string, number][] = [
-      [Math.cos(now * 0.9) * 0.4, Math.sin(now * 1.1) * 0.35, 'rgba(255, 211, 110, 0.55)', 0.6],
-      [Math.cos(now * 0.7 + 2) * 0.45, Math.sin(now * 0.8 + 1) * 0.4, 'rgba(255, 92, 120, 0.35)', 0.55],
+      [Math.cos(now * 0.9) * 0.4, Math.sin(now * 1.1) * 0.35, 'rgba(34, 211, 238, 0.5)', 0.6],
+      [Math.cos(now * 0.7 + 2) * 0.45, Math.sin(now * 0.8 + 1) * 0.4, 'rgba(124, 92, 255, 0.35)', 0.55],
       [Math.cos(now * 1.2 + 4) * 0.35, Math.sin(now * 0.6 + 3) * 0.45, 'rgba(255, 255, 255, 0.35)', 0.4],
     ];
     for (const [dx, dy, color, s] of blobs) {
@@ -355,6 +356,24 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
       ctx.fillStyle = bg;
       ctx.fillRect(CX - r * 1.3, CY - r * 1.3, r * 2.6, r * 2.6);
     }
+    // 点阵球面：一层缓慢自转的经纬点，让球看起来像在"运算"
+    const spin = now * 0.35;
+    ctx.fillStyle = '#ffffff';
+    for (let lat = -60; lat <= 60; lat += 20) {
+      const la = (lat * Math.PI) / 180;
+      const ring = Math.cos(la);
+      const count = Math.max(6, Math.round(16 * ring));
+      for (let i = 0; i < count; i++) {
+        const lo = (i / count) * Math.PI * 2 + spin;
+        const z = ring * Math.cos(lo);
+        if (z <= 0.05) continue;
+        ctx.globalAlpha = 0.12 + 0.3 * z;
+        ctx.beginPath();
+        ctx.arc(CX + ring * Math.sin(lo) * r * 0.9, CY - Math.sin(la) * r * 0.9, 0.6 + z * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
     ctx.restore();
 
     // 高光
@@ -412,7 +431,7 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
     ctx.translate(-fx, -fy);
 
     // 腮红
-    ctx.fillStyle = `rgba(255, 80, 110, ${BLUSH[expr] ?? 0.18})`;
+    ctx.fillStyle = `rgba(255, 80, 110, ${BLUSH[expr] ?? 0.1})`;
     ellipse(ctx, fx - 22, fy + 10, 6, 3.5);
     ctx.fill();
     ellipse(ctx, fx + 22, fy + 10, 6, 3.5);
@@ -661,7 +680,7 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
         star5(ctx, p.x, p.y, p.size * Math.sin(t * Math.PI), t * 4);
         ctx.fill();
       } else {
-        ctx.fillStyle = '#e85c3f';
+        ctx.fillStyle = '#1e4fd8';
         ctx.font = `bold ${p.size * (0.7 + t * 0.5)}px sans-serif`;
         ctx.fillText('z', p.x, p.y);
       }
@@ -688,13 +707,13 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
       ctx.translate(x, y);
       ctx.rotate(Math.sin(now * 2 + file.phase) * 0.18);
       ctx.globalAlpha = cycle < 0.08 ? cycle / 0.08 : cycle > 0.84 ? (1 - cycle) / 0.16 : 0.95;
-      ctx.fillStyle = file.kind === 0 ? "#fff4c9" : file.kind === 1 ? "#ffe0d4" : "#e8f3ff";
+      ctx.fillStyle = file.kind === 0 ? "#e0f7fd" : file.kind === 1 ? "#e6eeff" : "#eef0ff";
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 1.2;
       roundRect(ctx, -w * 0.55, -h * 0.55, w * 1.1, h * 1.1, 2.5);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = file.kind === 0 ? "#e8a63e" : file.kind === 1 ? "#e85c3f" : "#6b9bd1";
+      ctx.fillStyle = file.kind === 0 ? "#0891b2" : file.kind === 1 ? "#2f6bff" : "#6d5df5";
       ctx.font = `bold ${w * 0.62}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -768,7 +787,7 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
       ctx.clearRect(0, 0, W, H);
       drawBusyFiles();
       const f = clamp(1 - (float + 4) / 40, 0.45, 1);
-      ctx.fillStyle = `rgba(232, 92, 63, ${0.14 * f})`;
+      ctx.fillStyle = `rgba(47, 107, 255, ${0.14 * f})`;
       ellipse(ctx, CX + ox * 0.5, 166, 30 * f, 4.5 * f);
       ctx.fill();
 

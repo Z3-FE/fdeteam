@@ -48,7 +48,7 @@ def extract_report(text: str) -> Optional[dict]:
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fenced:
         candidate = fenced.group(1)
-    elif '"status"' in text and '"report"' in text:
+    elif "{" in text and "}" in text:
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
@@ -61,6 +61,9 @@ def extract_report(text: str) -> Optional[dict]:
         return None
     if isinstance(obj, dict) and obj.get("status") == "completed" and isinstance(obj.get("report"), dict):
         return obj["report"]
+    # 纠错调用偶尔省略外层 status/report，直接返回报告对象；字段足够明确时也接受。
+    if isinstance(obj, dict) and "painPoint" in obj and isinstance(obj.get("directions"), list):
+        return obj
     return None
 
 

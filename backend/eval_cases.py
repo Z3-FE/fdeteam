@@ -8,6 +8,7 @@
     arch -arm64 ./.venv/bin/python eval_cases.py 2>/dev/null # 列出用例，输入编号选择（回车=全部）
     arch -arm64 ./.venv/bin/python eval_cases.py all         # 不询问，直接跑全部
     arch -arm64 ./.venv/bin/python eval_cases.py flow        # 只跑 flow 类（完整问诊）
+    arch -arm64 ./.venv/bin/python eval_cases.py reply       # 只跑 reply 类（守边界）
     arch -arm64 ./.venv/bin/python eval_cases.py list        # 列出全部用例和编号（不调模型）
     arch -arm64 ./.venv/bin/python eval_cases.py 1           # 按编号跑（可写多个编号）
 
@@ -15,6 +16,7 @@
 
 判分说明：
 - flow 用例：跑完一串回答，检查最终报告的结构（痛点/量化/方向/根因行动/置信度）。
+- reply 用例：发一句话（或几句），检查 AI 当轮回复守住了边界（不报价、不乱出报告、一次只问一个）。
 """
 import json
 import os
@@ -47,6 +49,32 @@ FLOW_CASES = [
     },
 ]
 
+# ---- reply 用例：发一句话（或几句），判 AI 当轮回复守没守住边界 ----
+# turns：用户说的话；检查最后一轮 AI 回复。
+#   forbid：这些词一个都不许出现（命中即失败）
+#   expect_no_report：这一轮不许直接出报告
+#   max_questions：AI 当轮问号数量不许超过这个数
+REPLY_CASES = [
+    {
+        "name": "想套报价不报价",
+        "turns": ["帮我做个这样的系统大概要多少钱？"],
+        "forbid": ["报价", "万元", "元起", "收费", "价格是"],
+        "expect_no_report": True,
+    },
+    {
+        "name": "无关闲聊要拉回",
+        "turns": ["今天天气真不错啊哈哈"],
+        "expect_no_report": True,
+        "max_questions": 1,
+    },
+    {
+        "name": "一句抛三件事只问一个",
+        "turns": ["我客户跟进乱、库存也对不上、还老招不到人"],
+        "expect_no_report": True,
+        "max_questions": 1,
+    },
+]
+
 # 对诊断没帮助的发散提问，问诊里出现即算失败
 FILLER_WORDS = ["电脑还是手机", "手机还是电脑", "什么设备", "什么格式", "电子版还是纸质", "放在哪里", "放哪"]
 # 给模型看的东西漏进了对话：报告字段名、括号旁白
@@ -64,6 +92,18 @@ PASS, FAIL = "✅", "❌"
 def _chat(client, cid, msg):
     r = client.post("/api/chat", json={"conversationId": cid, "message": msg}).json()
     return r, r["conversationId"]
+
+
+def _confirm(client, r):
+    """flow 评测默认认可理解摘要，再取最终报告。"""
+    if r.get("type") != "confirmation":
+        return r
+    _print_ai(r)
+    print("🧑 对，就是这个")
+    return client.post(
+        "/api/chat",
+        json={"conversationId": r["conversationId"], "message": "", "action": "confirm_understanding"},
+    ).json()
 
 
 def _print_ai(r):
@@ -92,6 +132,7 @@ def run_flow(case) -> list:
             r, cid = _chat(c, cid, msg)
             turns += 1
             print(f"🧑 {msg}")
+            r = _confirm(c, r)
             if r["type"] == "report":
                 report = r["report"]
                 break
@@ -135,6 +176,34 @@ def run_flow(case) -> list:
     return checks
 
 
+def run_reply(case) -> list:
+    """发完 turns，检查最后一轮 AI 回复守没守住边界。"""
+    with TestClient(app) as c:
+        cid = None
+        print(f"\n—— [reply] {case['name']} ——")
+        r = None
+        for msg in case["turns"]:
+            r, cid = _chat(c, cid, msg)
+            print(f"🧑 {msg}")
+            if r["type"] == "report":
+                print("📋（直接出了报告）", json.dumps(r["report"], ensure_ascii=False)[:120])
+                break
+            _print_ai(r)
+    is_report = r["type"] == "report"
+    text = "" if is_report else r.get("text", "")
+    checks = []
+    if case.get("expect_no_report"):
+        checks.append(("没有直接出报告", not is_report))
+    for w in case.get("forbid", []):
+        checks.append((f"不出现「{w}」", w not in text))
+    if "max_questions" in case and not is_report:
+        q = text.count("？") + text.count("?")
+        checks.append((f"最多问 {case['max_questions']} 个问题（实问 {q}）", q <= case["max_questions"]))
+    if not is_report:
+        checks.append(("回复非空", bool(text.strip())))
+    return checks
+
+
 def _report(title, results) -> int:
     total, passed = 0, 0
     print("\n" + "=" * 46 + f"\n{title}")
@@ -151,7 +220,7 @@ def _report(title, results) -> int:
 
 def _numbered():
     """全部用例按顺序编号，返回 [(编号, 类型, 用例)]。"""
-    items = [("flow", c) for c in FLOW_CASES]
+    items = [("flow", c) for c in FLOW_CASES] + [("reply", c) for c in REPLY_CASES]
     return [(i, kind, c) for i, (kind, c) in enumerate(items, 1)]
 
 
@@ -177,8 +246,8 @@ def main() -> int:
             return 0
         args = line.split() or ["all"]
     numbered = _numbered()
-    if args[0] in ("all", "flow"):
-        chosen = [(k, c) for _, k, c in numbered if args[0] in ("all", k)]
+    if args[0] in ("all", "flow", "reply"):
+        chosen = [(k, c) for _, k, c in numbered if args[0] == "all" or args[0] == k]
     else:
         # 按编号选：eval_cases.py 1
         by_no = {i: (k, c) for i, k, c in numbered}
@@ -193,6 +262,10 @@ def main() -> int:
     if flow:
         res = [(c["name"], run_flow(c)) for c in flow]
         rc |= _report("flow（完整问诊）结果", res)
+    reply = [c for k, c in chosen if k == "reply"]
+    if reply:
+        res = [(c["name"], run_reply(c)) for c in reply]
+        rc |= _report("reply（守边界）结果", res)
     return rc
 
 

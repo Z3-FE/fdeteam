@@ -64,6 +64,12 @@ def test_flow_reaches_report():
         for msg in ["客户和订单太乱", "信息对不上", "每天1小时左右", "说不清", "用微信记"]:
             last = c.post("/api/chat", json={"conversationId": cid, "message": msg}).json()
             cid = last["conversationId"]
+            if last["type"] == "confirmation":
+                last = c.post(
+                    "/api/chat",
+                    json={"conversationId": cid, "message": "", "action": "confirm_understanding"},
+                ).json()
+                break
             if last["type"] == "report":
                 break
         assert last["type"] == "report"
@@ -118,7 +124,7 @@ def test_force_report_at_max_turns(monkeypatch):
             last = c.post("/api/chat", json={"conversationId": cid, "message": f"第{i + 1}句"}).json()
             cid = last["conversationId"]
     assert flags == [False] * (MAX_USER_TURNS - 1) + [True]
-    assert last["type"] == "report"
+    assert last["type"] == "confirmation"
 
 
 def test_monthly_cost_note_is_computed():
@@ -190,6 +196,44 @@ def test_banned_question_is_retried_with_correction(monkeypatch):
         r = c.post("/api/chat", json={"conversationId": None, "message": "你好"}).json()
     assert seen[0] is None and "东西在哪" in seen[1]
     assert r["text"] == "那每天花多久？"
+
+
+def test_report_without_number_asks_to_quantify_first(monkeypatch):
+    """模型想收尾但 costValue 是"说不清"，先退回去逼它问一句量化，再出报告。"""
+    report_json = (
+        '```json\n{"status":"completed","report":{"costValue":"说不清","costUnit":"未知",'
+        '"directions":[{"title":"x","confidence":"高"}]}}\n```'
+    )
+    seen = []
+    replies = iter([report_json, "那产品经理一天大概花多久？\n@@SUGGEST: 1小时/天 | 2小时以上 | 说不清"])
+
+    async def fake_complete(history, force_report=False, extra=None):
+        seen.append(extra)
+        return next(replies)
+
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    with TestClient(app) as c:
+        r = c.post("/api/chat", json={"conversationId": None, "message": "你好"}).json()
+    assert seen[0] is None and seen[1] is not None  # 第二次带上了量化纠正
+    assert r["type"] == "message"
+    assert r["text"] == "那产品经理一天大概花多久？"
+
+
+def test_report_without_number_is_accepted_if_retry_still_missing(monkeypatch):
+    """逼问一次后模型还是出没数字的报告，就照收，不无限退回。"""
+    report_json = (
+        '```json\n{"status":"completed","report":{"costValue":"说不清","costUnit":"未知",'
+        '"painPoint":"p","directions":[{"title":"x","confidence":"高"}]}}\n```'
+    )
+
+    async def fake_complete(history, force_report=False, extra=None):
+        return report_json
+
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    with TestClient(app) as c:
+        r = c.post("/api/chat", json={"conversationId": None, "message": "你好"}).json()
+    assert r["type"] == "confirmation"
+    assert "p" in r["text"]
 
 
 def test_banned_question_kept_if_retry_also_banned(monkeypatch):

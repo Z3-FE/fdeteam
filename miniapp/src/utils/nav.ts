@@ -1,10 +1,11 @@
 import Taro from '@tarojs/taro';
 
-export type PageId = 'home' | 'chat' | 'report' | 'generating' | 'success';
+export type PageId = 'home' | 'chat' | 'confirmation' | 'report' | 'generating' | 'success';
 
 const MAP: Record<PageId, string> = {
   home: '/pages/landing/index',
   chat: '/pages/consult/index',
+  confirmation: '/pages/confirmation/index',
   report: '/pages/report/index',
   generating: '/pages/generating/index',
   success: '/pages/success/index',

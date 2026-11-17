@@ -11,7 +11,7 @@ import {
 } from '../../data/consultation';
 import { AIAvatar, IconSend } from '../../components/icons';
 import { navigate } from '../../utils/nav';
-import { confirmUnderstanding, correctUnderstanding, postChat, type ChatResult } from '../../api/client';
+import { postChat, type ChatResult } from '../../api/client';
 
 // 一般 6 轮左右问完，进度条按这个分段
 const ROUNDS = 6;
@@ -21,7 +21,6 @@ export default function Consult() {
   const [draft, setDraft] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
   const [thinking, setThinking] = useState(false);
-  const [correcting, setCorrecting] = useState(false);
   const [scrollInto, setScrollInto] = useState('');
   const awaitingConfirmation = session.confirmation !== null;
   const finished = session.report !== null;
@@ -49,7 +48,8 @@ export default function Consult() {
         };
       }
       saveSession(next);
-      if (result.type === 'report') navigate('generating');
+      if (result.type === 'confirmation') navigate('confirmation');
+      if (result.type === 'report') navigate('report');
       return next;
     });
   }, []);
@@ -78,25 +78,6 @@ export default function Consult() {
     },
     [applyResult, awaitingConfirmation, finished, session, thinking],
   );
-
-  const acceptUnderstanding = () => {
-    if (!session.conversationId || thinking) return;
-    setThinking(true);
-    confirmUnderstanding(session.conversationId).then(applyResult).catch(() => {
-      setThinking(false);
-      Taro.showToast({ title: '网络开小差了，再点一次', icon: 'none' });
-    });
-  };
-
-  const submitCorrection = () => {
-    const text = draft.trim();
-    if (!session.conversationId || !text || thinking) return;
-    setThinking(true);
-    correctUnderstanding(session.conversationId, text).then(applyResult).catch(() => {
-      setThinking(false);
-      Taro.showToast({ title: '网络开小差了，再提交一次', icon: 'none' });
-    });
-  };
 
   const chips =
     thinking || completed || awaitingConfirmation
@@ -172,24 +153,20 @@ export default function Consult() {
           </View>
         )}
 
-        {awaitingConfirmation && !thinking && (
-          <View className="confirmation-card">
-            <View className="confirmation-title">我先确认一下有没有理解偏</View>
-            <View className="confirmation-text">{session.confirmation}</View>
-            {!correcting ? (
-              <View className="confirmation-actions">
-                <View className="btn btn-primary" onClick={acceptUnderstanding}>对，就是这个</View>
-                <View className="btn btn-ghost" onClick={() => { setCorrecting(true); setDraft(''); }}>不对，有点问题</View>
-              </View>
-            ) : (
-              <View className="confirmation-correction">
-                <View className="confirmation-hint">哪里理解错了？补充一句就行。</View>
-                <View className="btn btn-primary" onClick={submitCorrection}>提交并生成报告</View>
-              </View>
-            )}
+        {completed && (
+          <View className="chat-done">
+            <View className="chat-done-title">诊断报告整理好了</View>
+            <View className="chat-done-text">你的核心问题、它的代价和能怎么解决都写在里面，2 分钟能看完。</View>
+            <View className="btn btn-primary" onClick={() => navigate('report')}>
+              查看诊断报告
+            </View>
           </View>
         )}
 
+        <View id={scrollInto} className="chat-end" />
+      </ScrollView>
+
+      <View className={`composer-wrap ${completed ? 'is-done' : ''}`}>
         {chips.length > 0 && lastIsAi && (
           <View className="reply-picks">
             <View className="picks">
@@ -207,34 +184,19 @@ export default function Consult() {
             <View className="picks-hint">可以多选，也可以在下面自己写</View>
           </View>
         )}
-
-        {completed && (
-          <View className="chat-done">
-            <View className="chat-done-title">诊断报告整理好了</View>
-            <View className="chat-done-text">你的核心问题、它的代价和能怎么解决都写在里面，2 分钟能看完。</View>
-            <View className="btn btn-primary" onClick={() => navigate('report')}>
-              查看诊断报告
-            </View>
-          </View>
-        )}
-
-        <View id={scrollInto} className="chat-end" />
-      </ScrollView>
-
-      <View className={`composer-wrap ${completed ? 'is-done' : ''}`}>
         <View className="composer">
           <Input
             className="composer-input"
             value={draft}
-            disabled={completed || thinking || (awaitingConfirmation && !correcting)}
-            placeholder={completed ? '诊断已完成' : thinking ? '稍等，正在想…' : correcting ? '哪里理解错了？补充一句就行' : '用大白话说就行'}
+            disabled={completed || thinking || awaitingConfirmation}
+            placeholder={completed ? '诊断已完成' : thinking ? '稍等，正在想…' : '用大白话说就行'}
             confirmType="send"
             onInput={(e) => setDraft(e.detail.value)}
-            onConfirm={() => correcting ? submitCorrection() : send(draft)}
+            onConfirm={() => send(draft)}
           />
           <View
-            className={`composer-send ${(correcting ? thinking || !draft.trim() : sendDisabled) ? 'is-disabled' : ''}`}
-            onClick={() => correcting ? (!thinking && draft.trim() && submitCorrection()) : (!sendDisabled && send(draft))}
+            className={`composer-send ${sendDisabled ? 'is-disabled' : ''}`}
+            onClick={() => !sendDisabled && send(draft)}
           >
             <IconSend />
           </View>

@@ -60,6 +60,18 @@ def init_db() -> None:
             conn.execute("ALTER TABLE conversations ADD COLUMN suggest_fallbacks INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass
+        for sql in (
+            "ALTER TABLE conversations ADD COLUMN pending_report_json TEXT",
+            "ALTER TABLE conversations ADD COLUMN confirmation_status TEXT",
+            "ALTER TABLE conversations ADD COLUMN understanding_corrected INTEGER DEFAULT 0",
+            "ALTER TABLE conversations ADD COLUMN report_feedback TEXT",
+            "ALTER TABLE conversations ADD COLUMN report_correction_count INTEGER DEFAULT 0",
+            "ALTER TABLE conversations ADD COLUMN report_correction_text TEXT",
+        ):
+            try:
+                conn.execute(sql)
+            except sqlite3.OperationalError:
+                pass
 
 
 def use_suggest_fallback(conversation_id: str, limit: int) -> bool:
@@ -113,7 +125,85 @@ def save_report(conversation_id: str, report: dict) -> None:
             (conversation_id, json.dumps(report, ensure_ascii=False), _now_ms()),
         )
         conn.execute(
-            "UPDATE conversations SET status = 'reported' WHERE id = ?", (conversation_id,)
+            "UPDATE conversations SET status = 'reported', pending_report_json = NULL, "
+            "confirmation_status = 'completed' WHERE id = ?", (conversation_id,)
+        )
+
+
+def get_latest_report(conversation_id: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT report_json FROM briefs WHERE conversation_id = ? ORDER BY id DESC LIMIT 1",
+            (conversation_id,),
+        ).fetchone()
+    return json.loads(row["report_json"]) if row else None
+
+
+def save_report_feedback(conversation_id: str, feedback: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE conversations SET report_feedback = ? WHERE id = ?",
+            (feedback, conversation_id),
+        )
+
+
+def begin_report_correction(conversation_id: str, correction: str) -> bool:
+    """报告最多纠正一次；先占位，失败时由 release_report_correction 归还。"""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE conversations SET report_feedback = 'inaccurate', report_correction_count = 1, "
+            "report_correction_text = ? WHERE id = ? AND COALESCE(report_correction_count, 0) = 0",
+            (correction, conversation_id),
+        )
+        return cur.rowcount == 1
+
+
+def release_report_correction(conversation_id: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE conversations SET report_correction_count = 0, report_correction_text = NULL "
+            "WHERE id = ? AND report_feedback = 'inaccurate'",
+            (conversation_id,),
+        )
+
+
+def save_pending_report(conversation_id: str, report: dict) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE conversations SET pending_report_json = ?, confirmation_status = 'awaiting' WHERE id = ?",
+            (json.dumps(report, ensure_ascii=False), conversation_id),
+        )
+
+
+def get_pending_report(conversation_id: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT pending_report_json FROM conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+    if not row or not row["pending_report_json"]:
+        return None
+    return json.loads(row["pending_report_json"])
+
+
+def use_understanding_correction(conversation_id: str) -> bool:
+    """理解纠正最多提交一次。"""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE conversations SET understanding_corrected = 1, confirmation_status = 'correcting' "
+            "WHERE id = ? AND confirmation_status = 'awaiting' "
+            "AND COALESCE(understanding_corrected, 0) = 0",
+            (conversation_id,),
+        )
+        return cur.rowcount == 1
+
+
+def release_understanding_correction(conversation_id: str) -> None:
+    """模型生成失败时归还纠正机会，让用户可以重试。"""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE conversations SET understanding_corrected = 0, confirmation_status = 'awaiting' "
+            "WHERE id = ? AND confirmation_status = 'correcting'",
+            (conversation_id,),
         )
 
 

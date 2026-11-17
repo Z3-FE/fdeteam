@@ -113,6 +113,15 @@ export async function correctUnderstanding(conversationId: string, correction: s
   return mapChatResult(await post('/chat', { conversationId, message: correction, action: 'correct_understanding' }));
 }
 
+export async function submitReportFeedback(
+  conversationId: string,
+  action: 'accurate' | 'correct',
+  correction = '',
+): Promise<DiagnosisReport | null> {
+  const data = await post('/report-feedback', { conversationId, action, correction });
+  return data.type === 'report' ? mapReport(data.report) : null;
+}
+
 export async function postLead(
   conversationId: string,
   channel: 'wechat' | 'sms',

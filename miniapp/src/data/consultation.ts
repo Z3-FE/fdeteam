@@ -1,7 +1,7 @@
 import Taro from '@tarojs/taro';
 
-export const SCHEMA_VERSION = 3;
-export const STORAGE_KEY = 'wenti.consultation.v3';
+export const SCHEMA_VERSION = 5;
+export const STORAGE_KEY = 'wenti.consultation.v5';
 
 export type Confidence = '高' | '中' | '低';
 
@@ -46,6 +46,8 @@ export interface ConsultationSession {
   answers: string[];
   suggestions: string[];
   confirmation: string | null;
+  generationRequest: { action: 'confirm' | 'correct'; correction?: string } | null;
+  reportFeedback: 'accurate' | 'corrected' | null;
   report: DiagnosisReport | null;
   lead: Lead | null;
 }
@@ -67,6 +69,8 @@ export function createSession(): ConsultationSession {
     answers: [],
     suggestions: [],
     confirmation: null,
+    generationRequest: null,
+    reportFeedback: null,
     report: null,
     lead: null,
   };

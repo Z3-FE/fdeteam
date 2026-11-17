@@ -42,6 +42,17 @@ def _print_ai(r: dict) -> None:
         print("   选项:", " | ".join(r["suggestions"]))
 
 
+def _accept_confirmation(client, r: dict) -> dict:
+    if r.get("type") != "confirmation":
+        return r
+    _print_ai(r)
+    print("🧑 对，就是这个")
+    return client.post(
+        "/api/chat",
+        json={"conversationId": r["conversationId"], "message": "", "action": "confirm_understanding"},
+    ).json()
+
+
 def run_scripted(answers: list[str]) -> int:
     report = None
     turns = 0
@@ -52,6 +63,7 @@ def run_scripted(answers: list[str]) -> int:
             cid = r["conversationId"]
             turns += 1
             print(f"\n🧑 {msg}")
+            r = _accept_confirmation(c, r)
             if r["type"] == "report":
                 report = r["report"]
                 break
@@ -95,6 +107,16 @@ def run_interactive() -> int:
                 break
             r = c.post("/api/chat", json={"conversationId": cid, "message": msg}).json()
             cid = r["conversationId"]
+            if r["type"] == "confirmation":
+                _print_ai(r)
+                print("   输入 1 表示「对，就是这个」，输入其他内容表示纠正并直接生成报告")
+                correction = input("🧑 你: ").strip()
+                payload = (
+                    {"conversationId": cid, "message": "", "action": "confirm_understanding"}
+                    if correction == "1"
+                    else {"conversationId": cid, "message": correction, "action": "correct_understanding"}
+                )
+                r = c.post("/api/chat", json=payload).json()
             if r["type"] == "report":
                 print("\n📋 诊断报告:\n" + json.dumps(r["report"], ensure_ascii=False, indent=2))
                 break
