@@ -1,7 +1,7 @@
 import Taro from '@tarojs/taro';
 
-export const SCHEMA_VERSION = 2;
-export const STORAGE_KEY = 'wenti.consultation.v2';
+export const SCHEMA_VERSION = 3;
+export const STORAGE_KEY = 'wenti.consultation.v3';
 
 export type Confidence = '高' | '中' | '低';
 
@@ -45,6 +45,7 @@ export interface ConsultationSession {
   messages: ChatMessage[];
   answers: string[];
   suggestions: string[];
+  confirmation: string | null;
   report: DiagnosisReport | null;
   lead: Lead | null;
 }
@@ -65,6 +66,7 @@ export function createSession(): ConsultationSession {
     messages: [{ id: 'ai-opening', role: 'ai', text: OPENING_MESSAGE }],
     answers: [],
     suggestions: [],
+    confirmation: null,
     report: null,
     lead: null,
   };

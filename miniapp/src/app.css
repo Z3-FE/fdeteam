@@ -300,7 +300,7 @@ p {
   50% { transform: translateY(-4px); }
 }
 
-/* 落地页 Canvas 小精灵，宽高比和 Sprite.tsx 里的 W/H（220×180）一致 */
+/* 落地页 Canvas 小精灵，宽高比和 Sprite.tsx 里的画布尺寸（220×180）一致 */
 .hero-sprite {
   position: relative;
   display: block;
@@ -981,6 +981,92 @@ p {
 
 .composer-send.is-disabled {
   background: #f3e3dc;
+}
+
+/* ============================================================
+   Generating report
+   ============================================================ */
+.generating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 0 24px 10vh;
+  background: radial-gradient(circle at 50% 42%, #fff0e8 0%, var(--bg) 46%, var(--bg) 100%);
+}
+.generating-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  text-align: center;
+}
+.generating-orb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 300px;
+  height: 230px;
+  margin-bottom: 4px;
+}
+.busy-sprite {
+  display: block;
+  width: 300px;
+  height: 245px;
+  pointer-events: none;
+}
+.generating-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+.generating-title-char {
+  display: inline-block;
+  min-width: .82em;
+  color: var(--ink-3);
+  animation: generating-word 1.65s ease-in-out infinite;
+}
+.generating-title-char:nth-last-child(-n + 3) {
+  min-width: .38em;
+}
+@keyframes generating-word {
+  0%, 18%, 100% {
+    color: var(--ink-3);
+    opacity: .42;
+    transform: translateY(2px) scale(.96);
+  }
+  32%, 52% {
+    color: var(--brand-dark);
+    opacity: 1;
+    transform: translateY(-3px) scale(1.08);
+    text-shadow: 0 4px 14px rgba(232, 92, 63, .24);
+  }
+  68% {
+    color: var(--ink);
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.generating-percent {
+  min-width: 54px;
+  margin-top: 10px;
+  color: var(--ink-3);
+  font-size: 15px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+  transition: color .25s ease, transform .25s ease;
+}
+.generating-percent.is-complete {
+  color: var(--brand-dark);
+  font-weight: 700;
+  transform: scale(1.08);
 }
 
 /* ============================================================
@@ -1917,4 +2003,37 @@ p {
   z-index: 50;
   padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, rgba(250, 248, 246, 0) 0%, rgba(250, 248, 246, 0.94) 28%, #faf8f6 100%);
+}
+
+/* 问诊收尾：生成报告前先确认 AI 是否理解准确 */
+.confirmation-card {
+  margin: 18px 16px 8px 46px;
+  padding: 18px;
+  border: 1px solid #eadfd7;
+  border-radius: 16px;
+  background: #fffaf6;
+  box-shadow: 0 8px 24px rgba(89, 58, 43, 0.07);
+}
+.confirmation-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.confirmation-text {
+  margin-top: 9px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--ink-2);
+}
+.confirmation-actions,
+.confirmation-correction {
+  margin-top: 15px;
+}
+.confirmation-actions .btn + .btn {
+  margin-top: 9px;
+}
+.confirmation-hint {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--ink-3);
 }

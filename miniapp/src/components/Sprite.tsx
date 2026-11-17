@@ -84,6 +84,10 @@ interface Scene {
   tap: () => void;
 }
 
+interface SpriteProps {
+  busy?: boolean;
+}
+
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
@@ -155,7 +159,7 @@ function arcLine(ctx: Ctx, x: number, y: number, w: number, h: number) {
 }
 
 // k：设计坐标到画布像素的倍率，只用来换算阴影（shadowBlur 不受 transform 影响）
-function createScene(ctx: Ctx, k: number): Scene {
+function createScene(ctx: Ctx, k: number, busy = false): Scene {
   let start = -1;
   let last = 0;
   let now = 0;
@@ -174,6 +178,12 @@ function createScene(ctx: Ctx, k: number): Scene {
   const taps: number[] = [];
   const ripples: number[] = [];
   const parts: Particle[] = [];
+  const busyFiles = Array.from({ length: 7 }, (_, i) => ({
+    phase: i * 0.72,
+    speed: 0.7 + (i % 3) * 0.12,
+    size: 8 + (i % 2) * 2,
+    kind: i % 3,
+  }));
   // 环绕粒子：倾斜轨道上转圈，转到球后面时画在球体之下
   const orbiters: Orbiter[] = Array.from({ length: 14 }, (_, i) => ({
     a: (i / 14) * Math.PI * 2 + rand(-0.2, 0.2),
@@ -201,6 +211,11 @@ function createScene(ctx: Ctx, k: number): Scene {
 
   // 返回"认真听"的强度 0~1
   const update = (dt: number) => {
+    if (busy) {
+      lookX += (0 - lookX) * (1 - Math.pow(0.002, dt));
+      for (const o of orbiters) o.a += o.speed * dt * 2.4;
+      return 0;
+    }
     // 眨眼：偶尔连眨两下
     if (now >= blinkAt) {
       blinkStart = now;
@@ -358,6 +373,40 @@ function createScene(ctx: Ctx, k: number): Scene {
     const lx = fx - 12;
     const rx = fx + 12;
     ctx.save();
+    if (busy) {
+      ctx.strokeStyle = "#fff";
+      ctx.shadowColor = "rgba(255,255,255,.9)";
+      ctx.shadowBlur = 8 * k;
+      ctx.lineCap = "round";
+      ctx.lineWidth = 3.4;
+      arcLine(ctx, CX - 13, CY, 6, -4.5);
+      arcLine(ctx, CX + 13, CY, 6, -4.5);
+      ctx.beginPath();
+      ctx.moveTo(CX - 20, CY - 15);
+      ctx.lineTo(CX - 7, CY - 11);
+      ctx.moveTo(CX + 7, CY - 11);
+      ctx.lineTo(CX + 20, CY - 15);
+      ctx.stroke();
+      ctx.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const x = CX - 9 + i * 1.5;
+        const y = CY + 15 + Math.sin(i * 1.8 + now * 9) * 1.2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(255,92,122,.34)";
+      ellipse(ctx, CX - 25, CY + 9, 6, 3);
+      ctx.fill();
+      ellipse(ctx, CX + 25, CY + 9, 6, 3);
+      ctx.fill();
+      ctx.fillStyle = "#dff4ff";
+      ellipse(ctx, CX + 29 + Math.sin(now * 8), CY - 18, 3.2, 5.5, -0.25);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     ctx.translate(fx, fy);
     ctx.scale(pop, pop);
     ctx.translate(-fx, -fy);
@@ -620,6 +669,40 @@ function createScene(ctx: Ctx, k: number): Scene {
     }
   };
 
+  const drawBusyFiles = () => {
+    if (!busy) return;
+    for (const file of busyFiles) {
+      const cycle = ((now * file.speed + file.phase) % 3.2) / 3.2;
+      const fromLeft = Math.sin(file.phase * 2.3) < 0;
+      const startX = fromLeft ? -12 : W + 12;
+      const startY = 26 + (file.kind * 28 + file.phase * 9) % 98;
+      const targetX = CX + (file.kind - 1) * 7;
+      const targetY = CY - 30;
+      const bend = Math.sin(cycle * Math.PI) * (fromLeft ? -16 : 16);
+      const x = startX + (targetX - startX) * cycle;
+      const y = startY + (targetY - startY) * cycle + bend;
+      const scale = 1 - cycle * 0.28;
+      const w = file.size * scale;
+      const h = w * 1.25;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.sin(now * 2 + file.phase) * 0.18);
+      ctx.globalAlpha = cycle < 0.08 ? cycle / 0.08 : cycle > 0.84 ? (1 - cycle) / 0.16 : 0.95;
+      ctx.fillStyle = file.kind === 0 ? "#fff4c9" : file.kind === 1 ? "#ffe0d4" : "#e8f3ff";
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.2;
+      roundRect(ctx, -w * 0.55, -h * 0.55, w * 1.1, h * 1.1, 2.5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = file.kind === 0 ? "#e8a63e" : file.kind === 1 ? "#e85c3f" : "#6b9bd1";
+      ctx.font = `bold ${w * 0.62}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(file.kind === 0 ? "¥" : file.kind === 1 ? "?" : "✓", 0, 0);
+      ctx.restore();
+    }
+  };
+
   return {
     frame(ts: number) {
       if (start < 0) {
@@ -648,7 +731,12 @@ function createScene(ctx: Ctx, k: number): Scene {
       let sx = 1;
       let sy = 1;
       let ox = 0;
-      if (expr === 'dizzy') {
+      if (busy) {
+        rot = Math.sin(now * 12) * 0.018;
+        ox = Math.sin(now * 10) * 1.4;
+        sx = 1.025 + Math.sin(now * 8) * 0.012;
+        sy = 0.975 - Math.sin(now * 8) * 0.012;
+      } else if (expr === 'dizzy') {
         rot = Math.sin(t * 7) * 0.14;
         ox = Math.sin(t * 3.5) * 5;
       } else if (expr === 'shy') {
@@ -678,6 +766,7 @@ function createScene(ctx: Ctx, k: number): Scene {
       }
 
       ctx.clearRect(0, 0, W, H);
+      drawBusyFiles();
       const f = clamp(1 - (float + 4) / 40, 0.45, 1);
       ctx.fillStyle = `rgba(232, 92, 63, ${0.14 * f})`;
       ellipse(ctx, CX + ox * 0.5, 166, 30 * f, 4.5 * f);
@@ -724,7 +813,7 @@ type RafHost = {
   cancelAnimationFrame: (id: number) => void;
 };
 
-export function Sprite() {
+export function Sprite({ busy = false }: SpriteProps) {
   const sceneRef = useRef<Scene | null>(null);
 
   useEffect(() => {
@@ -739,7 +828,7 @@ export function Sprite() {
       const ctx = canvas.getContext('2d') as Ctx;
       const k = (cssW / W) * dpr;
       ctx.scale(k, k);
-      const scene = createScene(ctx, k);
+      const scene = createScene(ctx, k, busy);
       sceneRef.current = scene;
       host = (process.env.TARO_ENV === 'h5' ? window : canvas) as RafHost;
       const loop = (ts: number) => {
@@ -753,7 +842,7 @@ export function Sprite() {
     const init = (attempt: number) => {
       if (disposed) return;
       if (process.env.TARO_ENV === 'h5') {
-        const el = document.querySelector(`#${CANVAS_ID}`);
+        const el = document.querySelector(`#${busy ? "busy-sprite" : CANVAS_ID}`);
         const canvas = el && (el.tagName === 'CANVAS' ? el : el.querySelector('canvas'));
         if (canvas) {
           const rect = (canvas as HTMLCanvasElement).getBoundingClientRect();
@@ -762,7 +851,7 @@ export function Sprite() {
         return;
       }
       Taro.createSelectorQuery()
-        .select(`#${CANVAS_ID}`)
+        .select(`#${busy ? "busy-sprite" : CANVAS_ID}`)
         .fields({ node: true, size: true })
         .exec((res) => {
           const r = res && res[0];
@@ -782,9 +871,9 @@ export function Sprite() {
   return (
     <Canvas
       type="2d"
-      id={CANVAS_ID}
-      className="hero-sprite"
-      onTouchStart={() => sceneRef.current?.tap()}
+      id={busy ? "busy-sprite" : CANVAS_ID}
+      className={busy ? "busy-sprite" : "hero-sprite"}
+      onTouchStart={busy ? undefined : () => sceneRef.current?.tap()}
     />
   );
 }

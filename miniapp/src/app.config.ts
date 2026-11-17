@@ -1,5 +1,6 @@
 export default defineAppConfig({
   pages: [
+    'pages/generating/index',
     'pages/report/index',
     'pages/landing/index',
     'pages/consult/index',

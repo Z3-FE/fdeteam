@@ -18,7 +18,14 @@ export interface ChatReportResult {
   report: DiagnosisReport;
 }
 
-export type ChatResult = ChatMessageResult | ChatReportResult;
+export interface ChatConfirmationResult {
+  type: 'confirmation';
+  conversationId: string;
+  text: string;
+  suggestions: string[];
+}
+
+export type ChatResult = ChatMessageResult | ChatReportResult | ChatConfirmationResult;
 
 interface BackendDirection {
   title: string;
@@ -79,12 +86,31 @@ async function post(path: string, data: Record<string, unknown>): Promise<any> {
   return res.data;
 }
 
-export async function postChat(conversationId: string | null, message: string): Promise<ChatResult> {
-  const data = await post('/chat', { conversationId, message });
+function mapChatResult(data: any): ChatResult {
   if (data.type === 'report') {
     return { type: 'report', conversationId: data.conversationId, report: mapReport(data.report) };
   }
+  if (data.type === 'confirmation') {
+    return {
+      type: 'confirmation',
+      conversationId: data.conversationId,
+      text: data.text,
+      suggestions: data.suggestions || ['对，就是这个', '不对，有点问题'],
+    };
+  }
   return { type: 'message', conversationId: data.conversationId, text: data.text, suggestions: data.suggestions || [] };
+}
+
+export async function postChat(conversationId: string | null, message: string): Promise<ChatResult> {
+  return mapChatResult(await post('/chat', { conversationId, message }));
+}
+
+export async function confirmUnderstanding(conversationId: string): Promise<ChatResult> {
+  return mapChatResult(await post('/chat', { conversationId, message: '', action: 'confirm_understanding' }));
+}
+
+export async function correctUnderstanding(conversationId: string, correction: string): Promise<ChatResult> {
+  return mapChatResult(await post('/chat', { conversationId, message: correction, action: 'correct_understanding' }));
 }
 
 export async function postLead(
