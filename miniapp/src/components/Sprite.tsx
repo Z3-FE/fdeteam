@@ -2,724 +2,216 @@ import Taro from '@tarojs/taro';
 import { useEffect, useRef } from 'react';
 import { Canvas } from '@tarojs/components';
 
-// 落地页小精灵：一颗会呼吸的发光能量球，Canvas 2D 逐帧绘制。
-// 平时眨眼、张望，隔一阵自己做个鬼脸（眨眼 / 坏笑 / 吐舌头 / 星星眼 / 认真听）；
-// 点一下随机给个反应并泛起涟漪；1.5 秒内连点 4 下会晕乎乎；16 秒不碰就打瞌睡，点它会被吓醒。
+// 小精灵：参考 libraries.dev/orbs 的点阵球，Canvas 2D 逐帧绘制。
+// 平时：一颗缓慢自转、轻轻呼吸的点阵球；点一下泛起涟漪，点阵向外弹一下、转快一阵。
+// 思考中（busy）：球体转快、变淡，一道扫描带上下扫过，几条倾斜轨道上的亮点像彗星一样绕着球转。
+// tone="mono" 用在白底黑白主题页面：黑灰点 + 很淡的灰光；pulse 每加 1，点阵向中心收紧再弹开一次。
 
 const CANVAS_ID = 'hero-sprite';
-// 设计坐标系（和 CSS 里 .hero-sprite 的宽高一致），绘制时按实际尺寸等比缩放
+const BUSY_ID = 'busy-sprite';
+// 设计坐标系（和 CSS 里 .hero-sprite 的宽高比一致），绘制时按实际尺寸等比缩放
 const W = 220;
 const H = 180;
 const CX = 110;
-const CY = 88;
-const R = 42;
+const CY = 86;
+const R = 46;
+// 整颗球朝观察者前倾一点，看得到上半球
+const VIEW_TILT = 0.38;
+const SPHERE_DOTS = 220;
+// 黑白主题点更密更细，避免像高尔夫球
+const MONO_DOTS = 340;
+const MONO_INK = 'rgb(24, 24, 24)';
 
-const GOLD = '#ffd36e';
-const CYAN = '#7ee8fa';
-const TONGUE = '#ff6b8a';
-const ORBIT_COLORS = [CYAN, '#9cc0ff', '#ffffff'];
+// 思考中的轨道：tilt 轨道面倾角，yaw 初始方位，count 点数，speed 圈/秒（负数反转），radius 相对球半径
+const ORBITS = [
+  { tilt: 1.15, yaw: 0.2, count: 28, speed: 0.34, radius: 1.2 },
+  { tilt: -0.85, yaw: 1.5, count: 24, speed: -0.27, radius: 1.32 },
+  { tilt: 0.3, yaw: -0.9, count: 20, speed: 0.42, radius: 1.1 },
+];
+
+// 颜色从品牌蓝渐到青色，预先算好一组，逐点只取下标
+const BLUE = [47, 107, 255];
+const CYAN = [34, 211, 238];
+const PALETTE = Array.from({ length: 16 }, (_, i) => {
+  const t = i / 15;
+  const c = BLUE.map((b, j) => Math.round(b + (CYAN[j] - b) * t));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+});
+// 白底黑白主题用的灰阶：下半球浅灰，上半球接近纯黑
+const GRAY = Array.from({ length: 16 }, (_, i) => {
+  const v = Math.round(170 - (153 * i) / 15);
+  return `rgb(${v}, ${v}, ${v})`;
+});
 
 type Ctx = CanvasRenderingContext2D;
 
-type Expr =
-  | 'idle'
-  | 'wink'
-  | 'smirk'
-  | 'tongue'
-  | 'starry'
-  | 'happy'
-  | 'love'
-  | 'surprised'
-  | 'shy'
-  | 'dizzy'
-  | 'sleepy'
-  | 'listen';
-
-// 每个表情持续多久（秒）；不写的会一直保持，直到被别的事件打断
-const DURATION: Partial<Record<Expr, number>> = {
-  wink: 1.6,
-  smirk: 2.0,
-  tongue: 1.8,
-  starry: 2.0,
-  happy: 1.4,
-  love: 1.8,
-  surprised: 1.2,
-  shy: 1.8,
-  dizzy: 2.6,
-  listen: 2.2,
-};
-const IDLE_PICKS: Expr[] = ['wink', 'smirk', 'tongue', 'starry', 'listen'];
-const TAP_PICKS: Expr[] = ['happy', 'love', 'surprised', 'shy', 'tongue', 'wink'];
-const BLUSH: Partial<Record<Expr, number>> = {
-  shy: 0.6,
-  happy: 0.4,
-  love: 0.45,
-  tongue: 0.35,
-  starry: 0.3,
-  wink: 0.3,
-};
-const SLEEP_AFTER = 16;
-
-interface Particle {
-  kind: 'heart' | 'star' | 'z';
+interface Vec {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  age: number;
-  life: number;
-  size: number;
+  z: number;
 }
 
-interface Orbiter {
-  a: number;
-  r: number;
-  speed: number;
-  tilt: number;
+interface Dot extends Vec {
   size: number;
-  hue: number;
+  alpha: number;
+  color: string;
 }
 
 interface Scene {
-  frame: (now: number) => void;
+  frame: (ts: number) => void;
   tap: () => void;
+  absorb: () => void;
 }
 
 interface SpriteProps {
   busy?: boolean;
+  // mono：白底黑点，给黑白主题的页面用
+  tone?: 'light' | 'mono';
+  // 每次加 1 触发一次"接收指令"：点阵先向中心收紧，再弹开
+  pulse?: number;
 }
 
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
-const easeOutBack = (x: number) => 1 + 2.70158 * Math.pow(x - 1, 3) + 1.70158 * Math.pow(x - 1, 2);
+const TAU = Math.PI * 2;
+
+// 斐波那契球面：点在球面上分布均匀，没有经纬网那种两极扎堆
+const fibSphere = (n: number): Vec[] =>
+  Array.from({ length: n }, (_, i) => {
+    const y = 1 - ((i + 0.5) / n) * 2;
+    const ring = Math.sqrt(1 - y * y);
+    const a = i * Math.PI * (3 - Math.sqrt(5));
+    return { x: Math.cos(a) * ring, y, z: Math.sin(a) * ring };
+  });
+const SPHERE = fibSphere(SPHERE_DOTS);
+const MONO_SPHERE = fibSphere(MONO_DOTS);
+
+// 绕 y 轴转 yaw，再绕 x 轴前倾 tilt；y 朝上，z 朝向观察者
+function rotate(p: Vec, yaw: number, tilt: number): Vec {
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const x = p.x * cy + p.z * sy;
+  const z1 = -p.x * sy + p.z * cy;
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  return { x, y: p.y * ct - z1 * st, z: p.y * st + z1 * ct };
+}
+
 
 // 用 arc + scale 画椭圆，比 ctx.ellipse 兼容性好
-function ellipse(ctx: Ctx, x: number, y: number, rx: number, ry: number, rot = 0) {
+function ellipse(ctx: Ctx, x: number, y: number, rx: number, ry: number) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(rot);
   ctx.scale(Math.max(rx, 0.01), Math.max(ry, 0.01));
   ctx.beginPath();
-  ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.arc(0, 0, 1, 0, TAU);
   ctx.restore();
 }
 
-function roundRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {
-  r = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-function heart(ctx: Ctx, x: number, y: number, s: number) {
-  ctx.beginPath();
-  ctx.moveTo(x, y + s * 0.35);
-  ctx.bezierCurveTo(x - s, y - s * 0.4, x - s * 0.45, y - s, x, y - s * 0.45);
-  ctx.bezierCurveTo(x + s * 0.45, y - s, x + s, y - s * 0.4, x, y + s * 0.35);
-  ctx.closePath();
-}
-
-function star5(ctx: Ctx, x: number, y: number, r: number, rot = 0) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2 - Math.PI / 2 + rot;
-    const rr = i % 2 === 0 ? r : r * 0.45;
-    const px = x + Math.cos(a) * rr;
-    const py = y + Math.sin(a) * rr;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-}
-
-// 蚊香眼
-function spiral(ctx: Ctx, x: number, y: number, r: number, rot: number) {
-  const n = 40;
-  ctx.beginPath();
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    const a = t * 2.2 * Math.PI * 2 + rot;
-    const px = x + Math.cos(a) * r * t;
-    const py = y + Math.sin(a) * r * t;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-}
-
-// 弧线：从 (x-w, y) 到 (x+w, y)，h > 0 向上拱，h < 0 向下弯
-function arcLine(ctx: Ctx, x: number, y: number, w: number, h: number) {
-  ctx.beginPath();
-  ctx.moveTo(x - w, y);
-  ctx.quadraticCurveTo(x, y - h, x + w, y);
-  ctx.stroke();
-}
-
-// k：设计坐标到画布像素的倍率，只用来换算阴影（shadowBlur 不受 transform 影响）
-function createScene(ctx: Ctx, k: number, busy = false): Scene {
+function createScene(ctx: Ctx, busy: boolean, mono: boolean): Scene {
   let start = -1;
   let last = 0;
   let now = 0;
-  let blinkAt = 1.6;
-  let blinkStart = -10;
-  let lookX = 0;
-  let tgtX = 0;
-  let lookAt = 1.5;
-  let expr: Expr = 'idle';
-  let exprStart = 0;
-  let nextPlay = 4;
-  let lastTouch = 0;
-  let emitAt = 0;
+  let spin = 0;
   let tapStart = -10;
-  let jumpStart = -10;
-  const taps: number[] = [];
+  let absorbStart = -10;
   const ripples: number[] = [];
-  const parts: Particle[] = [];
-  const busyFiles = Array.from({ length: 7 }, (_, i) => ({
-    phase: i * 0.72,
-    speed: 0.7 + (i % 3) * 0.12,
-    size: 8 + (i % 2) * 2,
-    kind: i % 3,
-  }));
-  // 环绕粒子：倾斜轨道上转圈，转到球后面时画在球体之下
-  const orbiters: Orbiter[] = Array.from({ length: 14 }, (_, i) => ({
-    a: (i / 14) * Math.PI * 2 + rand(-0.2, 0.2),
-    r: rand(54, 70),
-    speed: rand(0.5, 0.9) * (i % 2 ? 1 : -1),
-    tilt: rand(0.22, 0.38),
-    size: rand(1.4, 2.8),
-    hue: i % 3,
-  }));
+  const dots: Dot[] = [];
+  const pal = mono ? GRAY : PALETTE;
+  // 按高度取色：浅色主题上青下蓝；黑白主题上深下浅
+  const colorAt = (y: number) => pal[Math.round(clamp((y + 1) / 2, 0, 1) * 15)];
+  // 光晕、涟漪的底色
+  const glowRgb = mono ? '17, 17, 17' : '47, 107, 255';
 
-  const setExpr = (name: Expr) => {
-    expr = name;
-    exprStart = now;
-    if (name === 'happy' || name === 'surprised') jumpStart = now;
+  // 接收指令：0.18 秒收紧到 0.68 倍，然后带阻尼地弹回，中间会冲过头一点
+  const absorbScale = () => {
+    const t = (now - absorbStart) / 0.75;
+    if (t < 0 || t >= 1) return 1;
+    if (t < 0.24) return 1 - 0.32 * Math.sin(((t / 0.24) * Math.PI) / 2);
+    const u = (t - 0.24) / 0.76;
+    return 1 - 0.32 * (1 - u) * Math.cos(u * Math.PI * 2.5);
   };
-  const exprT = () => {
-    const d = DURATION[expr];
-    return d ? (now - exprStart) / d : 0;
+  const absorbAmt = () => {
+    const t = (now - absorbStart) / 0.75;
+    return t >= 0 && t < 1 ? 1 - t : 0;
   };
+
+  // 点击反馈强度：0.9 秒内从 1 衰减到 0
   const tapAmt = () => {
-    const t = (now - tapStart) / 0.8;
-    return t >= 0 && t < 1 ? Math.sin(t * Math.PI) * (1 - t) : 0;
+    const t = (now - tapStart) / 0.9;
+    return t >= 0 && t < 1 ? Math.pow(1 - t, 2) : 0;
   };
-  const spawn = (p: Omit<Particle, 'age'>) => parts.push({ ...p, age: 0 });
 
-  // 返回"认真听"的强度 0~1
-  const update = (dt: number) => {
-    if (busy) {
-      lookX += (0 - lookX) * (1 - Math.pow(0.002, dt));
-      for (const o of orbiters) o.a += o.speed * dt * 2.4;
-      return 0;
+  const pushSphere = (r: number, tap: number) => {
+    // 思考中有一道扫描带上下扫过球面，扫到的点变亮变大
+    const scanY = Math.sin(now * 1.7) * 0.95;
+    for (const base of mono ? MONO_SPHERE : SPHERE) {
+      // 表面起伏：沿高度方向的一道慢波，点一下会猛地鼓一下
+      const wave = 1 + (0.018 + tap * 0.12) * Math.sin(base.y * 6 - now * 2.4);
+      const p = rotate(base, spin, VIEW_TILT);
+      const depth = (p.z + 1) / 2;
+      // 黑白主题统一深灰，前后层次只靠透明度和大小
+      let size = mono ? 0.45 + depth * 0.85 : 0.7 + depth * 1.3;
+      let alpha = mono ? 0.1 + depth * 0.8 : 0.16 + depth * 0.74;
+      if (busy) {
+        const near = Math.max(0, 1 - Math.abs(base.y - scanY) / 0.16);
+        alpha = alpha * 0.55 + near * 0.45;
+        size += near * 0.8;
+      }
+      dots.push({
+        x: CX + p.x * r * wave,
+        y: CY - p.y * r * wave,
+        z: p.z,
+        size,
+        alpha,
+        color: mono ? MONO_INK : colorAt(p.y),
+      });
     }
-    // 眨眼：偶尔连眨两下
-    if (now >= blinkAt) {
-      blinkStart = now;
-      blinkAt = now + (Math.random() < 0.2 ? 0.28 : rand(2.6, 5));
-    }
-    if (now >= lookAt) {
-      tgtX = Math.random() < 0.4 ? 0 : rand(-1, 1);
-      lookAt = now + rand(1.5, 3.2);
-    }
-    const want =
-      expr === 'shy' ? 1 : expr === 'smirk' ? -0.6 : expr === 'idle' || expr === 'listen' ? tgtX : 0;
-    lookX += (want - lookX) * (1 - Math.pow(0.002, dt));
+  };
 
-    if (DURATION[expr] && exprT() >= 1) {
-      setExpr('idle');
-      nextPlay = now + rand(5, 8);
-    }
-    if (expr === 'idle' && now - lastTouch > SLEEP_AFTER) setExpr('sleepy');
-    else if (expr === 'idle' && now >= nextPlay) setExpr(pick(IDLE_PICKS));
-
-    // 表情附带的小粒子
-    if (now >= emitAt) {
-      if (expr === 'love') {
-        spawn({ kind: 'heart', x: CX + rand(-30, 30), y: CY - 30, vx: rand(-12, 12), vy: rand(-50, -30), life: 1.3, size: rand(4, 6.5) });
-        emitAt = now + 0.22;
-      } else if (expr === 'starry') {
-        spawn({ kind: 'star', x: CX + rand(-60, 60), y: CY + rand(-50, 30), vx: 0, vy: -6, life: 0.7, size: rand(3, 5) });
-        emitAt = now + 0.15;
-      } else if (expr === 'sleepy') {
-        spawn({ kind: 'z', x: CX + 28, y: CY - 34, vx: rand(10, 16), vy: -20, life: 2.2, size: rand(9, 12) });
-        emitAt = now + 1.1;
+  // 轨道上一串点，亮点像彗星一样带着拖尾往前跑
+  const pushOrbits = (r: number) => {
+    for (const o of ORBITS) {
+      const head = (now * o.speed * TAU) % TAU;
+      const yaw = o.yaw + now * 0.15;
+      for (let i = 0; i < o.count; i++) {
+        const a = (i / o.count) * TAU;
+        const flat: Vec = { x: Math.cos(a), y: 0, z: Math.sin(a) };
+        // 先把轨道面倾斜 o.tilt，再转到自己的方位，最后套上整体前倾
+        const tilted: Vec = {
+          x: flat.x,
+          y: -flat.z * Math.sin(o.tilt),
+          z: flat.z * Math.cos(o.tilt),
+        };
+        const p = rotate(rotate(tilted, yaw, 0), 0, VIEW_TILT);
+        // 和亮点的角距离，按运动方向算拖尾
+        let d = o.speed > 0 ? head - a : a - head;
+        d = ((d % TAU) + TAU) % TAU;
+        const trail = Math.pow(Math.max(0, 1 - d / 2.2), 1.6);
+        const depth = (p.z + 1) / 2;
+        dots.push({
+          x: CX + p.x * r * o.radius,
+          y: CY - p.y * r * o.radius,
+          z: p.z * o.radius,
+          size: 0.6 + trail * 1.8 + depth * 0.5,
+          alpha: (0.1 + trail * 0.9) * (0.45 + depth * 0.55),
+          color: trail > 0.6 ? pal[15] : pal[Math.round(4 + trail * 10)],
+        });
       }
     }
-
-    const listen = expr === 'listen' ? Math.sin(clamp(exprT(), 0, 1) * Math.PI) : 0;
-    const spin = expr === 'dizzy' ? 5 : expr === 'sleepy' ? -0.6 : 0;
-    const boost = 1 + listen * 1.5 + tapAmt() * 4 + spin;
-    for (const o of orbiters) o.a += o.speed * dt * boost;
-    for (let i = ripples.length - 1; i >= 0; i--) {
-      ripples[i] += dt;
-      if (ripples[i] > 1.2) ripples.splice(i, 1);
-    }
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const p = parts[i];
-      p.age += dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      if (p.kind === 'z') p.x += Math.sin(p.age * 4) * 0.3;
-      if (p.age >= p.life) parts.splice(i, 1);
-    }
-    return listen;
   };
 
-  // 球的轮廓：几层正弦叠加，amp 越大越"果冻"
-  const shape = (r: number, amp: number) => {
-    const n = 64;
-    ctx.beginPath();
-    for (let i = 0; i <= n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const w =
-        1 +
-        amp *
-          (0.5 * Math.sin(a * 3 + now * 2.1) +
-            0.3 * Math.sin(a * 5 - now * 3.3) +
-            0.2 * Math.sin(a * 2 + now * 1.4));
-      const x = CX + Math.cos(a) * r * w;
-      const y = CY + Math.sin(a) * r * w;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  };
-
-  const drawOrbiters = (front: boolean) => {
-    for (const o of orbiters) {
-      const s = Math.sin(o.a);
-      if (s > 0 !== front) continue;
-      const x = CX + Math.cos(o.a) * o.r;
-      const y = CY + s * o.r * o.tilt - Math.cos(o.a) * 6;
-      const color = ORBIT_COLORS[o.hue];
-      ctx.save();
-      ctx.globalAlpha = (front ? 0.95 : 0.4) * (expr === 'sleepy' ? 0.5 : 1);
-      ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 6 * k;
-      ctx.beginPath();
-      ctx.arc(x, y, o.size * (front ? 1 : 0.75), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-  };
-  const drawOrb = (r: number, amp: number, listen: number, tap: number) => {
-    // 外层光晕
-    const halo = ctx.createRadialGradient(CX, CY, r * 0.6, CX, CY, r * 2);
-    const hk = expr === 'sleepy' ? 0.18 : 0.35 + listen * 0.2 + tap * 0.3;
-    halo.addColorStop(0, `rgba(64, 140, 255, ${hk})`);
-    halo.addColorStop(1, 'rgba(64, 140, 255, 0)');
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(CX, CY, r * 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 点击涟漪
-    for (const t of ripples) {
-      const p = t / 1.2;
-      ctx.strokeStyle = `rgba(47, 107, 255, ${0.6 * (1 - p)})`;
-      ctx.lineWidth = 2.5 * (1 - p) + 0.5;
-      ctx.beginPath();
-      ctx.arc(CX, CY, r + p * 48, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    drawOrbiters(false);
-
-    // 主体：径向渐变，内部有几团颜色慢慢流动
-    ctx.save();
-    shape(r, amp);
-    const g = ctx.createRadialGradient(CX - r * 0.35, CY - r * 0.4, r * 0.1, CX, CY, r * 1.1);
-    g.addColorStop(0, '#d6f6ff');
-    g.addColorStop(0.45, '#5b8cff');
-    g.addColorStop(1, '#1d4ed8');
+  const drawGlow = (r: number, tap: number) => {
+    const base = busy ? 0.22 + 0.06 * Math.sin(now * 3) : 0.16 + tap * 0.14 + absorbAmt() * 0.3;
+    // 白底上灰光容易显脏，整体压低
+    const k = mono ? base * 0.35 : base;
+    const g = ctx.createRadialGradient(CX, CY, r * 0.2, CX, CY, r * 1.9);
+    g.addColorStop(0, mono ? `rgba(17, 17, 17, ${k})` : `rgba(34, 211, 238, ${k})`);
+    g.addColorStop(0.5, `rgba(${glowRgb}, ${k * 0.45})`);
+    g.addColorStop(1, `rgba(${glowRgb}, 0)`);
     ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(CX, CY, r * 1.9, 0, TAU);
     ctx.fill();
-    ctx.clip();
-    const blobs: [number, number, string, number][] = [
-      [Math.cos(now * 0.9) * 0.4, Math.sin(now * 1.1) * 0.35, 'rgba(34, 211, 238, 0.5)', 0.6],
-      [Math.cos(now * 0.7 + 2) * 0.45, Math.sin(now * 0.8 + 1) * 0.4, 'rgba(124, 92, 255, 0.35)', 0.55],
-      [Math.cos(now * 1.2 + 4) * 0.35, Math.sin(now * 0.6 + 3) * 0.45, 'rgba(255, 255, 255, 0.35)', 0.4],
-    ];
-    for (const [dx, dy, color, s] of blobs) {
-      const bx = CX + dx * r;
-      const by = CY + dy * r;
-      const br = r * s * (1 + listen * 0.3);
-      const bg = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-      bg.addColorStop(0, color);
-      bg.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = bg;
-      ctx.fillRect(CX - r * 1.3, CY - r * 1.3, r * 2.6, r * 2.6);
-    }
-    // 点阵球面：一层缓慢自转的经纬点，让球看起来像在"运算"
-    const spin = now * 0.35;
-    ctx.fillStyle = '#ffffff';
-    for (let lat = -60; lat <= 60; lat += 20) {
-      const la = (lat * Math.PI) / 180;
-      const ring = Math.cos(la);
-      const count = Math.max(6, Math.round(16 * ring));
-      for (let i = 0; i < count; i++) {
-        const lo = (i / count) * Math.PI * 2 + spin;
-        const z = ring * Math.cos(lo);
-        if (z <= 0.05) continue;
-        ctx.globalAlpha = 0.12 + 0.3 * z;
-        ctx.beginPath();
-        ctx.arc(CX + ring * Math.sin(lo) * r * 0.9, CY - Math.sin(la) * r * 0.9, 0.6 + z * 0.7, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // 高光
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    ellipse(ctx, CX - r * 0.38, CY - r * 0.48, r * 0.22, r * 0.11, -0.6);
-    ctx.fill();
-  };
-  const drawFace = () => {
-    const t = now - exprStart;
-    // 切换表情时脸"弹"一下
-    const pp = t / 0.35;
-    const pop = pp >= 0 && pp < 1 ? easeOutBack(pp) : 1;
-    const fx = CX + lookX * 7;
-    const fy = CY - 2;
-    const ey = fy;
-    const lx = fx - 12;
-    const rx = fx + 12;
-    ctx.save();
-    if (busy) {
-      ctx.strokeStyle = "#fff";
-      ctx.shadowColor = "rgba(255,255,255,.9)";
-      ctx.shadowBlur = 8 * k;
-      ctx.lineCap = "round";
-      ctx.lineWidth = 3.4;
-      arcLine(ctx, CX - 13, CY, 6, -4.5);
-      arcLine(ctx, CX + 13, CY, 6, -4.5);
-      ctx.beginPath();
-      ctx.moveTo(CX - 20, CY - 15);
-      ctx.lineTo(CX - 7, CY - 11);
-      ctx.moveTo(CX + 7, CY - 11);
-      ctx.lineTo(CX + 20, CY - 15);
-      ctx.stroke();
-      ctx.beginPath();
-      for (let i = 0; i <= 12; i++) {
-        const x = CX - 9 + i * 1.5;
-        const y = CY + 15 + Math.sin(i * 1.8 + now * 9) * 1.2;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = "rgba(255,92,122,.34)";
-      ellipse(ctx, CX - 25, CY + 9, 6, 3);
-      ctx.fill();
-      ellipse(ctx, CX + 25, CY + 9, 6, 3);
-      ctx.fill();
-      ctx.fillStyle = "#dff4ff";
-      ellipse(ctx, CX + 29 + Math.sin(now * 8), CY - 18, 3.2, 5.5, -0.25);
-      ctx.fill();
-      ctx.restore();
-      return;
-    }
-    ctx.translate(fx, fy);
-    ctx.scale(pop, pop);
-    ctx.translate(-fx, -fy);
-
-    // 腮红
-    ctx.fillStyle = `rgba(255, 80, 110, ${BLUSH[expr] ?? 0.1})`;
-    ellipse(ctx, fx - 22, fy + 10, 6, 3.5);
-    ctx.fill();
-    ellipse(ctx, fx + 22, fy + 10, 6, 3.5);
-    ctx.fill();
-
-    ctx.fillStyle = '#fff';
-    ctx.strokeStyle = '#fff';
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
-    ctx.shadowBlur = 8 * k;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 3.4;
-
-    const bt = (now - blinkStart) / 0.16;
-    const open = bt >= 0 && bt < 1 ? Math.abs(Math.cos(bt * Math.PI)) : 1;
-    const pill = (x: number) => {
-      const h = Math.max(2, 12 * open);
-      roundRect(ctx, x - 2.6, ey - h / 2, 5.2, h, 2.6);
-      ctx.fill();
-    };
-    const mouth = (fn: () => void) => {
-      ctx.save();
-      ctx.lineWidth = 2.6;
-      fn();
-      ctx.restore();
-    };
-
-    switch (expr) {
-      case 'wink': {
-        pill(lx);
-        arcLine(ctx, rx, ey + 1, 5, 5);
-        mouth(() => arcLine(ctx, fx + 1, fy + 12, 4.5, -4));
-        // 眨眼那侧闪一颗小星
-        const s = Math.sin(clamp(t / 0.6, 0, 1) * Math.PI);
-        ctx.fillStyle = GOLD;
-        ctx.shadowColor = GOLD;
-        star5(ctx, fx + 26, ey - 10, 4.5 * s, t * 3);
-        ctx.fill();
-        break;
-      }
-      case 'smirk': {
-        // 半眯眼斜着看，一边眉毛挑起
-        for (const x of [lx, rx]) {
-          ctx.beginPath();
-          ctx.arc(x, ey - 1, 4.2, 0, Math.PI);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.save();
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.moveTo(lx - 5, ey - 4);
-        ctx.lineTo(lx + 4, ey - 5);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(rx - 4, ey - 8);
-        ctx.lineTo(rx + 5, ey - 6);
-        ctx.stroke();
-        ctx.restore();
-        mouth(() => {
-          ctx.beginPath();
-          ctx.moveTo(fx - 6, fy + 13);
-          ctx.quadraticCurveTo(fx + 2, fy + 15, fx + 7, fy + 9);
-          ctx.stroke();
-        });
-        break;
-      }
-      case 'tongue': {
-        // > < 眯眼 + 晃来晃去的舌头
-        ctx.save();
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(lx - 4, ey - 5);
-        ctx.lineTo(lx + 3, ey);
-        ctx.lineTo(lx - 4, ey + 5);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(rx + 4, ey - 5);
-        ctx.lineTo(rx - 3, ey);
-        ctx.lineTo(rx + 4, ey + 5);
-        ctx.stroke();
-        ctx.restore();
-        const wig = Math.sin(t * 14) * 1.5;
-        ctx.save();
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = TONGUE;
-        roundRect(ctx, fx - 4 + wig, fy + 11, 8, 9 + Math.sin(t * 7) * 1.2, 4);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(200, 40, 80, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(fx + wig, fy + 13);
-        ctx.lineTo(fx + wig, fy + 17);
-        ctx.stroke();
-        ctx.restore();
-        mouth(() => arcLine(ctx, fx, fy + 11, 7, -2));
-        break;
-      }
-      case 'starry': {
-        const s = 1 + Math.sin(t * 10) * 0.12;
-        ctx.save();
-        ctx.fillStyle = '#fff6cc';
-        ctx.strokeStyle = GOLD;
-        ctx.shadowColor = GOLD;
-        ctx.shadowBlur = 10 * k;
-        ctx.lineWidth = 1.4;
-        star5(ctx, lx, ey, 8 * s, t * 1.5);
-        ctx.fill();
-        ctx.stroke();
-        star5(ctx, rx, ey, 8 * s, -t * 1.5);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-        ctx.beginPath();
-        ctx.moveTo(fx - 5, fy + 11);
-        ctx.quadraticCurveTo(fx, fy + 20, fx + 5, fy + 11);
-        ctx.closePath();
-        ctx.fill();
-        break;
-      }
-      case 'happy': {
-        arcLine(ctx, lx, ey + 2, 5, 6);
-        arcLine(ctx, rx, ey + 2, 5, 6);
-        ctx.beginPath();
-        ctx.moveTo(fx - 7, fy + 10);
-        ctx.quadraticCurveTo(fx, fy + 22, fx + 7, fy + 10);
-        ctx.closePath();
-        ctx.fill();
-        break;
-      }
-      case 'love': {
-        const s = 6.5 * (1 + Math.max(0, Math.sin(t * 9)) * 0.22);
-        ctx.save();
-        ctx.fillStyle = '#ff5c7a';
-        ctx.shadowColor = 'rgba(255, 92, 122, 0.9)';
-        heart(ctx, lx, ey + 1, s);
-        ctx.fill();
-        heart(ctx, rx, ey + 1, s);
-        ctx.fill();
-        ctx.restore();
-        mouth(() => arcLine(ctx, fx, fy + 11, 4.5, -4));
-        break;
-      }
-      case 'surprised': {
-        for (const x of [lx, rx]) {
-          ctx.beginPath();
-          ctx.arc(x, ey - 1, 5.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.save();
-        ctx.lineWidth = 2.2;
-        arcLine(ctx, lx, ey - 11, 4, 2.5);
-        arcLine(ctx, rx, ey - 11, 4, 2.5);
-        ctx.restore();
-        mouth(() => {
-          ctx.beginPath();
-          ctx.arc(fx, fy + 14, 3.2, 0, Math.PI * 2);
-          ctx.stroke();
-        });
-        break;
-      }
-      case 'shy': {
-        arcLine(ctx, lx, ey + 2, 4.5, 4.5);
-        arcLine(ctx, rx, ey + 2, 4.5, 4.5);
-        mouth(() => {
-          ctx.beginPath();
-          ctx.moveTo(fx - 5, fy + 12);
-          ctx.quadraticCurveTo(fx - 2.5, fy + 9, fx, fy + 12);
-          ctx.quadraticCurveTo(fx + 2.5, fy + 15, fx + 5, fy + 12);
-          ctx.stroke();
-        });
-        // 腮上三道斜线
-        ctx.save();
-        ctx.lineWidth = 1.6;
-        ctx.strokeStyle = 'rgba(255, 80, 110, 0.7)';
-        ctx.shadowBlur = 0;
-        for (const side of [-1, 1]) {
-          for (let i = 0; i < 3; i++) {
-            const bx = fx + side * 22 - 4 + i * 3.5;
-            ctx.beginPath();
-            ctx.moveTo(bx, fy + 8);
-            ctx.lineTo(bx + 2, fy + 12);
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-        break;
-      }
-      case 'dizzy': {
-        ctx.save();
-        ctx.lineWidth = 2.2;
-        spiral(ctx, lx, ey, 6.5, t * 9);
-        ctx.stroke();
-        spiral(ctx, rx, ey, 6.5, t * 9);
-        ctx.stroke();
-        ctx.restore();
-        mouth(() => {
-          ctx.beginPath();
-          for (let i = 0; i <= 12; i++) {
-            const x = fx - 7 + (i / 12) * 14;
-            const y = fy + 13 + Math.sin(i * 1.4 + t * 8) * 1.8;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.stroke();
-        });
-        break;
-      }
-      case 'sleepy': {
-        ctx.save();
-        ctx.lineWidth = 2.8;
-        arcLine(ctx, lx, ey + 1, 5, -3.5);
-        arcLine(ctx, rx, ey + 1, 5, -3.5);
-        ctx.restore();
-        // 嘴里吹的小泡泡
-        const b = 2 + (0.5 + 0.5 * Math.sin(now * 1.6)) * 1.6;
-        mouth(() => {
-          ctx.beginPath();
-          ctx.arc(fx + 2, fy + 13, b, 0, Math.PI * 2);
-          ctx.stroke();
-        });
-        break;
-      }
-      case 'listen': {
-        arcLine(ctx, lx, ey + 2, 5, 6);
-        arcLine(ctx, rx, ey + 2, 5, 6);
-        break;
-      }
-      default:
-        pill(lx);
-        pill(rx);
-    }
-    ctx.restore();
-  };
-  const drawParticles = () => {
-    for (const p of parts) {
-      const t = p.age / p.life;
-      ctx.save();
-      ctx.globalAlpha = t < 0.15 ? t / 0.15 : 1 - Math.pow((t - 0.15) / 0.85, 2);
-      if (p.kind === 'heart') {
-        ctx.fillStyle = '#ff5c7a';
-        heart(ctx, p.x, p.y, p.size);
-        ctx.fill();
-      } else if (p.kind === 'star') {
-        ctx.fillStyle = GOLD;
-        star5(ctx, p.x, p.y, p.size * Math.sin(t * Math.PI), t * 4);
-        ctx.fill();
-      } else {
-        ctx.fillStyle = '#1e4fd8';
-        ctx.font = `bold ${p.size * (0.7 + t * 0.5)}px sans-serif`;
-        ctx.fillText('z', p.x, p.y);
-      }
-      ctx.restore();
-    }
-  };
-
-  const drawBusyFiles = () => {
-    if (!busy) return;
-    for (const file of busyFiles) {
-      const cycle = ((now * file.speed + file.phase) % 3.2) / 3.2;
-      const fromLeft = Math.sin(file.phase * 2.3) < 0;
-      const startX = fromLeft ? -12 : W + 12;
-      const startY = 26 + (file.kind * 28 + file.phase * 9) % 98;
-      const targetX = CX + (file.kind - 1) * 7;
-      const targetY = CY - 30;
-      const bend = Math.sin(cycle * Math.PI) * (fromLeft ? -16 : 16);
-      const x = startX + (targetX - startX) * cycle;
-      const y = startY + (targetY - startY) * cycle + bend;
-      const scale = 1 - cycle * 0.28;
-      const w = file.size * scale;
-      const h = w * 1.25;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(Math.sin(now * 2 + file.phase) * 0.18);
-      ctx.globalAlpha = cycle < 0.08 ? cycle / 0.08 : cycle > 0.84 ? (1 - cycle) / 0.16 : 0.95;
-      ctx.fillStyle = file.kind === 0 ? "#e0f7fd" : file.kind === 1 ? "#e6eeff" : "#eef0ff";
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 1.2;
-      roundRect(ctx, -w * 0.55, -h * 0.55, w * 1.1, h * 1.1, 2.5);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = file.kind === 0 ? "#0891b2" : file.kind === 1 ? "#2f6bff" : "#6d5df5";
-      ctx.font = `bold ${w * 0.62}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(file.kind === 0 ? "¥" : file.kind === 1 ? "?" : "✓", 0, 0);
-      ctx.restore();
-    }
   };
 
   return {
@@ -731,98 +223,69 @@ function createScene(ctx: Ctx, k: number, busy = false): Scene {
       const dt = clamp((ts - last) / 1000, 0, 0.05);
       last = ts;
       now = (ts - start) / 1000;
-      const listen = update(dt);
       const tap = tapAmt();
-      const t = now - exprStart;
-      const sleepy = expr === 'sleepy';
-
-      // 呼吸 + 漂浮；睡着时呼吸更慢更深，身子往下沉一点
-      const breath = Math.sin(now * (sleepy ? 1.1 : 2.2));
-      const r = R * (1 + breath * (sleepy ? 0.04 : 0.025) + tap * 0.12);
-      const amp = 0.018 + listen * 0.05 + tap * 0.08 + (expr === 'dizzy' ? 0.04 : 0);
-      const jp = (now - jumpStart) / 0.55;
-      const jump = jp >= 0 && jp < 1 ? Math.sin(jp * Math.PI) * (expr === 'surprised' ? 14 : 20) : 0;
-      const float =
-        (sleepy ? -3 : 0) + Math.sin(now * (sleepy ? 0.8 : 1.6)) * (sleepy ? 1.5 : 4) + jump;
-
-      // 不同表情配不同的身体动作
-      let rot = 0;
-      let sx = 1;
-      let sy = 1;
-      let ox = 0;
-      if (busy) {
-        rot = Math.sin(now * 12) * 0.018;
-        ox = Math.sin(now * 10) * 1.4;
-        sx = 1.025 + Math.sin(now * 8) * 0.012;
-        sy = 0.975 - Math.sin(now * 8) * 0.012;
-      } else if (expr === 'dizzy') {
-        rot = Math.sin(t * 7) * 0.14;
-        ox = Math.sin(t * 3.5) * 5;
-      } else if (expr === 'shy') {
-        rot = 0.12 * Math.min(1, t * 4);
-        sx = 1.03;
-        sy = 0.97;
-      } else if (expr === 'smirk') {
-        rot = -0.06;
-      } else if (sleepy) {
-        rot = 0.08 + Math.sin(now * 0.8) * 0.03;
-        sx = 1.04;
-        sy = 0.95;
-      } else if (expr === 'tongue') {
-        rot = Math.sin(t * 6) * 0.05;
-      } else if (expr === 'wink') {
-        rot = Math.sin(clamp(t / 0.5, 0, 1) * Math.PI) * 0.09;
+      const absorb = absorbAmt();
+      // 平时慢慢自转，思考中转快；点一下、接收指令时都会加速一阵
+      spin += dt * ((busy ? 0.95 : 0.28) + tap * 3 + absorb * 6);
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        ripples[i] += dt;
+        if (ripples[i] > 1.2) ripples.splice(i, 1);
       }
-      // 起跳和落地时压扁，空中拉长
-      if (jp >= 0 && jp < 1) {
-        const squash = jp < 0.15 ? jp / 0.15 : jp > 0.85 ? (1 - jp) / 0.15 : 0;
-        sx += 0.1 * squash;
-        sy -= 0.1 * squash;
-        if (jp > 0.2 && jp < 0.8) {
-          sx -= 0.04;
-          sy += 0.05;
-        }
-      }
+
+      const breath = Math.sin(now * (busy ? 3.2 : 1.8));
+      const r = R * (1 + breath * 0.02 + tap * 0.06) * absorbScale();
+      const float = busy ? 0 : Math.sin(now * 1.3) * 3;
 
       ctx.clearRect(0, 0, W, H);
-      drawBusyFiles();
-      const f = clamp(1 - (float + 4) / 40, 0.45, 1);
-      ctx.fillStyle = `rgba(47, 107, 255, ${0.14 * f})`;
-      ellipse(ctx, CX + ox * 0.5, 166, 30 * f, 4.5 * f);
+
+      // 地面投影，球飘高时变小变淡；黑白主题贴近球底、收小
+      const f = 1 - float / 30;
+      ctx.fillStyle = `rgba(${glowRgb}, ${(mono ? 0.06 : 0.1) * f})`;
+      if (mono) ellipse(ctx, CX, CY + R + 12, 24 * f, 2.6 * f);
+      else ellipse(ctx, CX, 166, 34 * f, 4 * f);
       ctx.fill();
 
       ctx.save();
-      ctx.translate(CX + ox, CY + R - float);
-      ctx.rotate(rot);
-      ctx.scale(sx, sy);
-      ctx.translate(-CX, -(CY + R));
-      drawOrb(r, amp, listen, tap);
-      drawFace();
-      drawOrbiters(true);
-      ctx.restore();
+      ctx.translate(0, -float);
+      // 白底上的灰光像污渍，黑白主题不画
+      if (!mono) drawGlow(r, tap);
 
-      drawParticles();
+      for (const t of ripples) {
+        const p = t / 1.2;
+        ctx.strokeStyle = `rgba(${glowRgb}, ${(mono ? 0.4 : 0.45) * (1 - p)})`;
+        ctx.lineWidth = 1.5 * (1 - p) + 0.5;
+        ctx.beginPath();
+        ctx.arc(CX, CY, r + 4 + p * 44, 0, TAU);
+        ctx.stroke();
+      }
+
+      dots.length = 0;
+      pushSphere(r, tap);
+      if (busy) pushOrbits(r);
+      // 由远到近画，轨道转到球后面时自然被前面的点盖住
+      dots.sort((a, b) => a.z - b.z);
+      let color = '';
+      for (const d of dots) {
+        if (d.color !== color) {
+          color = d.color;
+          ctx.fillStyle = color;
+        }
+        ctx.globalAlpha = d.alpha;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.size, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
     },
     tap() {
-      lastTouch = now;
       tapStart = now;
       ripples.push(0);
-      taps.push(now);
-      while (taps.length && now - taps[0] > 1.5) taps.shift();
-      if (expr === 'sleepy') {
-        setExpr('surprised');
-        taps.length = 0;
-        return;
-      }
-      if (taps.length >= 4) {
-        setExpr('dizzy');
-        taps.length = 0;
-        return;
-      }
-      if (expr === 'dizzy') return;
-      let next = pick(TAP_PICKS);
-      while (next === expr) next = pick(TAP_PICKS);
-      setExpr(next);
+    },
+    absorb() {
+      absorbStart = now;
+      // 弹开那一下同时放出一圈涟漪
+      setTimeout(() => ripples.push(0), 180);
     },
   };
 }
@@ -832,8 +295,13 @@ type RafHost = {
   cancelAnimationFrame: (id: number) => void;
 };
 
-export function Sprite({ busy = false }: SpriteProps) {
+export function Sprite({ busy = false, tone = 'light', pulse = 0 }: SpriteProps) {
   const sceneRef = useRef<Scene | null>(null);
+  const id = busy ? BUSY_ID : CANVAS_ID;
+
+  useEffect(() => {
+    if (pulse > 0) sceneRef.current?.absorb();
+  }, [pulse]);
 
   useEffect(() => {
     let disposed = false;
@@ -847,7 +315,7 @@ export function Sprite({ busy = false }: SpriteProps) {
       const ctx = canvas.getContext('2d') as Ctx;
       const k = (cssW / W) * dpr;
       ctx.scale(k, k);
-      const scene = createScene(ctx, k, busy);
+      const scene = createScene(ctx, busy, tone === 'mono');
       sceneRef.current = scene;
       host = (process.env.TARO_ENV === 'h5' ? window : canvas) as RafHost;
       const loop = (ts: number) => {
@@ -861,7 +329,7 @@ export function Sprite({ busy = false }: SpriteProps) {
     const init = (attempt: number) => {
       if (disposed) return;
       if (process.env.TARO_ENV === 'h5') {
-        const el = document.querySelector(`#${busy ? "busy-sprite" : CANVAS_ID}`);
+        const el = document.querySelector(`#${id}`);
         const canvas = el && (el.tagName === 'CANVAS' ? el : el.querySelector('canvas'));
         if (canvas) {
           const rect = (canvas as HTMLCanvasElement).getBoundingClientRect();
@@ -870,7 +338,7 @@ export function Sprite({ busy = false }: SpriteProps) {
         return;
       }
       Taro.createSelectorQuery()
-        .select(`#${busy ? "busy-sprite" : CANVAS_ID}`)
+        .select(`#${id}`)
         .fields({ node: true, size: true })
         .exec((res) => {
           const r = res && res[0];
@@ -890,8 +358,8 @@ export function Sprite({ busy = false }: SpriteProps) {
   return (
     <Canvas
       type="2d"
-      id={busy ? "busy-sprite" : CANVAS_ID}
-      className={busy ? "busy-sprite" : "hero-sprite"}
+      id={id}
+      className={busy ? 'busy-sprite' : 'hero-sprite'}
       onTouchStart={busy ? undefined : () => sceneRef.current?.tap()}
     />
   );

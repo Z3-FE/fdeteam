@@ -128,6 +128,9 @@ def _mock_reply(history: list[dict], force_report: bool = False) -> str:
     n = len(user_turns)
     if n <= len(_MOCK_FOLLOWUPS) and not force_report:
         return _MOCK_FOLLOWUPS[n - 1]
+    # 问诊中只给收尾标记，报告等后端要求时才出
+    if not force_report:
+        return "@@READY: 1 小时/天"
 
     text = " ".join(m.get("content", "") for m in user_turns)
     scene = next(

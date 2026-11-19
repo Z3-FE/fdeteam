@@ -36,6 +36,8 @@ export interface DiagnosisReport {
 export interface Lead {
   channel: 'wechat' | 'sms';
   phone: string;
+  /** 方便沟通的时间，如"今天方便" */
+  time?: string;
   createdAt: number;
 }
 
@@ -46,14 +48,20 @@ export interface ConsultationSession {
   answers: string[];
   suggestions: string[];
   confirmation: string | null;
-  generationRequest: { action: 'confirm' | 'correct'; correction?: string } | null;
+  // confirm/correct：问诊结束后生成报告；revise：看完报告后补充，修正已有报告（只能一次）
+  generationRequest: { action: 'confirm' | 'correct' | 'revise'; correction?: string } | null;
+  /** 用户在补充信息页写的背景，报告页和顾问摘要里展示 */
+  supplementNote?: string;
   reportFeedback: 'accurate' | 'corrected' | null;
   report: DiagnosisReport | null;
   lead: Lead | null;
+  /** 保存报告时验证过的手机号（打码后），有值说明这份报告已保存 */
+  savedPhone?: string;
+  /** 报告页选中的方案方向标题，保存报告时一起提交 */
+  selectedDirections?: string[];
 }
 
-export const OPENING_MESSAGE =
-  '你好，我帮你把公司里最头疼的问题理清楚，免费的。咱们一步步来，你用大白话说就行——最近有哪件事，让你觉得特别费时间或费钱？';
+export const OPENING_MESSAGE = '我们一步步把最卡壳的问题理清楚。最近哪件事最费时间，或最费钱？';
 
 export const SCENE_CHIPS = ['客户和订单太乱', '库存老是说不准', '人手不够用', '账目和成本看不清'];
 
@@ -102,6 +110,26 @@ export function resetSession(): ConsultationSession {
   const session = createSession();
   saveSession(session);
   return session;
+}
+
+// 保存报告时验证过的手机号（明文），独立于问诊会话存放，重新问诊后联系顾问也能直接带出
+const ACCOUNT_PHONE_KEY = 'qb_account_phone';
+
+export function loadAccountPhone(): string {
+  try {
+    const value = Taro.getStorageSync(ACCOUNT_PHONE_KEY);
+    return typeof value === 'string' ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveAccountPhone(phone: string): void {
+  try {
+    Taro.setStorageSync(ACCOUNT_PHONE_KEY, phone);
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 export function formatReportDate(timestamp: number): string {

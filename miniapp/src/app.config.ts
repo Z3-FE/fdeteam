@@ -3,9 +3,12 @@ export default defineAppConfig({
     'pages/landing/index',
     'pages/consult/index',
     'pages/confirmation/index',
+    'pages/supplement/index',
     'pages/generating/index',
     'pages/report/index',
     'pages/success/index',
+    'pages/save/index',
+    'pages/history/index',
   ],
   window: {
     backgroundTextStyle: 'light',

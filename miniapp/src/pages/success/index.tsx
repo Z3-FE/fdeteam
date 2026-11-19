@@ -1,13 +1,9 @@
 import { Text, View } from '@tarojs/components';
-import { IconCheck, IconHome, IconRestart } from '../../components/icons';
-import { resetSession } from '../../data/consultation';
-import { navigate, redirect } from '../../utils/nav';
+import { IconCheck, IconHome } from '../../components/icons';
+import { relaunch } from '../../utils/nav';
 
 export default function Success() {
-  const restart = () => {
-    resetSession();
-    redirect('chat');
-  };
+  // 诊断完成后不提供重新诊断，只能看报告或回首页
 
   return (
     <View className="screen success">
@@ -30,11 +26,7 @@ export default function Success() {
         </View>
 
         <View className="success-actions">
-          <View className="btn btn-primary" onClick={restart}>
-            <IconRestart />
-            再诊断一个问题
-          </View>
-          <View className="btn btn-ghost" onClick={() => redirect('home')}>
+          <View className="btn btn-ghost" onClick={() => relaunch('home')}>
             <IconHome />
             返回首页
           </View>
